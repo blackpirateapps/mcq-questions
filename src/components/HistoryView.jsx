@@ -1,6 +1,161 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Download, Trash2 } from 'lucide-react';
+import { 
+  Upload, Download, Trash2, ChevronDown, ChevronUp, 
+  CheckCircle2, XCircle, MinusCircle, HelpCircle, Dices, Zap 
+} from 'lucide-react';
 import { db } from '../lib/db';
+
+// Helper to calculate detailed stats from raw session data
+const calculateExtendedStats = (session) => {
+  const stats = {
+    correct: 0, wrong: 0, skipped: 0,
+    confident: { correct: 0, wrong: 0, total: 0 },
+    unsure: { correct: 0, wrong: 0, total: 0 },
+    guessing: { correct: 0, wrong: 0, total: 0 }
+  };
+
+  const results = session.results || {};
+  const confidenceMap = session.confidenceMap || {};
+
+  Object.entries(results).forEach(([qId, status]) => {
+    if (status === 'skipped') {
+      stats.skipped++;
+      return;
+    }
+
+    // Determine confidence level (default to 'confident' if missing)
+    const confidence = confidenceMap[qId] || 'confident';
+
+    if (status === 'correct') {
+      stats.correct++;
+      if (stats[confidence]) stats[confidence].correct++;
+    } else if (status === 'wrong') {
+      stats.wrong++;
+      if (stats[confidence]) stats[confidence].wrong++;
+    }
+
+    if (stats[confidence]) stats[confidence].total++;
+  });
+
+  return stats;
+};
+
+// Sub-component for individual session cards
+const SessionCard = ({ session, onDelete }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const stats = calculateExtendedStats(session);
+
+  const getAccuracy = (correct, total) => total === 0 ? 0 : Math.round((correct / total) * 100);
+
+  const StatRow = ({ icon: Icon, label, data, colorClass }) => {
+    const acc = getAccuracy(data.correct, data.total);
+    if (data.total === 0) return null; // Hide if no questions in this category
+
+    return (
+      <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100 text-sm">
+        <div className="flex items-center gap-2 w-32">
+          <Icon size={16} className={colorClass} />
+          <span className="font-medium text-gray-700">{label}</span>
+        </div>
+        <div className="flex gap-4 text-gray-600">
+          <div className="flex items-center gap-1"><CheckCircle2 size={14} className="text-emerald-500"/> {data.correct}</div>
+          <div className="flex items-center gap-1"><XCircle size={14} className="text-red-500"/> {data.wrong}</div>
+        </div>
+        <div className="font-bold text-gray-800 w-12 text-right">{acc}%</div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+      {/* Header Row */}
+      <div 
+        className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer gap-4"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-bold text-gray-700">{new Date(session.timestamp).toLocaleDateString()}</span>
+            <span className="text-gray-400 text-xs">{new Date(session.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div className="flex gap-2">
+            {session.tags?.map(t => <span key={t} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{t}</span>)}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
+          <div className="text-right">
+            <div className="text-xs text-gray-400 uppercase">Score</div>
+            <div className="font-bold text-gray-800">
+              <span className="text-emerald-600">{stats.correct}</span> / <span className="text-red-500">{stats.wrong}</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-gray-400 uppercase">Accuracy</div>
+            <div className="font-bold text-blue-600">{getAccuracy(stats.correct, stats.correct + stats.wrong)}%</div>
+          </div>
+          <div className="flex items-center gap-2">
+             <button 
+                onClick={(e) => { e.stopPropagation(); onDelete(session.id); }} 
+                className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+             >
+              <Trash2 size={18} />
+             </button>
+             {isExpanded ? <ChevronUp size={20} className="text-gray-400"/> : <ChevronDown size={20} className="text-gray-400"/>}
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded Details */}
+      {isExpanded && (
+        <div className="px-4 pb-4 pt-0 animate-in slide-in-from-top-2">
+          <div className="border-t border-gray-100 pt-4 grid gap-2">
+            
+            {/* General Stats */}
+            <div className="grid grid-cols-3 gap-2 mb-2">
+               <div className="bg-emerald-50 border border-emerald-100 p-2 rounded-lg text-center">
+                  <div className="text-xs text-emerald-600 uppercase font-bold">Correct</div>
+                  <div className="text-xl font-bold text-emerald-700">{stats.correct}</div>
+               </div>
+               <div className="bg-red-50 border border-red-100 p-2 rounded-lg text-center">
+                  <div className="text-xs text-red-600 uppercase font-bold">Incorrect</div>
+                  <div className="text-xl font-bold text-red-700">{stats.wrong}</div>
+               </div>
+               <div className="bg-gray-50 border border-gray-200 p-2 rounded-lg text-center">
+                  <div className="text-xs text-gray-500 uppercase font-bold">Skipped</div>
+                  <div className="text-xl font-bold text-gray-600">{stats.skipped}</div>
+               </div>
+            </div>
+
+            {/* Confidence Breakdown */}
+            <div className="space-y-1">
+               <div className="text-xs font-semibold text-gray-400 uppercase mb-1 ml-1">Confidence Analysis</div>
+               <StatRow 
+                 icon={Zap} 
+                 label="Confident" 
+                 data={stats.confident} 
+                 colorClass="text-blue-500" 
+               />
+               <StatRow 
+                 icon={HelpCircle} 
+                 label="Unsure" 
+                 data={stats.unsure} 
+                 colorClass="text-amber-500" 
+               />
+               <StatRow 
+                 icon={Dices} 
+                 label="Guessing" 
+                 data={stats.guessing} 
+                 colorClass="text-purple-500" 
+               />
+            </div>
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function HistoryView() {
   const [sessions, setSessions] = useState([]);
@@ -65,31 +220,7 @@ export default function HistoryView() {
 
        <div className="space-y-3">
          {sessions.map(s => (
-           <div key={s.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition-shadow">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-bold text-gray-700">{new Date(s.timestamp).toLocaleDateString()}</span>
-                  <span className="text-gray-400 text-xs">{new Date(s.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
-                <div className="flex gap-2">
-                  {s.tags?.map(t => <span key={t} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{t}</span>)}
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-6">
-                 <div className="text-right">
-                    <div className="text-xs text-gray-400 uppercase">Accuracy</div>
-                    <div className="font-bold text-blue-600">{Math.round(s.stats.accuracy * 100)}%</div>
-                 </div>
-                 <div className="text-right hidden md:block">
-                    <div className="text-xs text-gray-400 uppercase">Questions</div>
-                    <div className="font-bold text-gray-700">{s.totalQuestions}</div>
-                 </div>
-                 <button onClick={() => handleDelete(s.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
-                   <Trash2 size={18} />
-                 </button>
-              </div>
-           </div>
+           <SessionCard key={s.id} session={s} onDelete={handleDelete} />
          ))}
          {sessions.length === 0 && <div className="text-center py-10 text-gray-400">No history available.</div>}
        </div>
