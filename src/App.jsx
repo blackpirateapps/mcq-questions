@@ -5,18 +5,22 @@ import QuestionCard from './components/QuestionCard';
 import GradingView from './components/GradingView';
 import StatsView from './components/StatsView';
 import HistoryView from './components/HistoryView';
+import SetupView from './components/SetupView';
 
 export default function BookCompanionApp() {
   const [view, setView] = useState('quiz'); // 'quiz', 'grading', 'stats', 'history'
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
+  // Session State
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  
   // Quiz State
   const [totalQuestions, setTotalQuestions] = useState(100);
   const [currentQuestion, setCurrentQuestion] = useState(1);
   const [answers, setAnswers] = useState({});
-  const [confidenceMap, setConfidenceMap] = useState({}); // Stores 'confident' | 'unsure' | 'guessing'
+  const [confidenceMap, setConfidenceMap] = useState({}); 
   const [flags, setFlags] = useState([]);
-  const [visited, setVisited] = useState(new Set([1])); // Track visited questions
+  const [visited, setVisited] = useState(new Set([1])); 
   const [autoAdvance, setAutoAdvance] = useState(true);
 
   // Restore active session from LocalStorage
@@ -29,25 +33,42 @@ export default function BookCompanionApp() {
       setConfidenceMap(p.confidenceMap || {});
       setCurrentQuestion(p.currentQuestion || 1);
       if (p.visited) setVisited(new Set(p.visited));
+      if (p.totalQuestions) setTotalQuestions(p.totalQuestions);
+      setIsSessionActive(true); // Mark session as active if data found
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('active-session', JSON.stringify({ 
-      answers, flags, confidenceMap, currentQuestion, visited: Array.from(visited) 
-    }));
-  }, [answers, flags, confidenceMap, currentQuestion, visited]);
+    if (isSessionActive) {
+      localStorage.setItem('active-session', JSON.stringify({ 
+        answers, flags, confidenceMap, currentQuestion, visited: Array.from(visited), totalQuestions 
+      }));
+    }
+  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, isSessionActive]);
 
   // Track visits
   useEffect(() => {
-    setVisited(prev => {
-      const next = new Set(prev);
-      next.add(currentQuestion);
-      return next;
-    });
-  }, [currentQuestion]);
+    if (isSessionActive) {
+      setVisited(prev => {
+        const next = new Set(prev);
+        next.add(currentQuestion);
+        return next;
+      });
+    }
+  }, [currentQuestion, isSessionActive]);
 
   // Handlers
+  const startNewSession = (count) => {
+    setTotalQuestions(count);
+    setCurrentQuestion(1);
+    setAnswers({});
+    setConfidenceMap({});
+    setFlags([]);
+    setVisited(new Set([1]));
+    setIsSessionActive(true);
+    setView('quiz');
+  };
+
   const handleAnswer = (opt) => {
     setAnswers(p => ({...p, [currentQuestion]: opt}));
     if (autoAdvance && currentQuestion < totalQuestions) {
@@ -65,12 +86,13 @@ export default function BookCompanionApp() {
 
   const handleSessionSaved = () => {
     // Clear local storage and state
+    localStorage.removeItem('active-session');
     setAnswers({});
     setFlags([]);
     setConfidenceMap({});
     setCurrentQuestion(1);
     setVisited(new Set([1]));
-    localStorage.removeItem('active-session');
+    setIsSessionActive(false); // Session ended
     setView('history');
   };
 
@@ -88,52 +110,57 @@ export default function BookCompanionApp() {
         flags={flags}
         visited={visited}
         onJump={setCurrentQuestion}
+        isSessionActive={isSessionActive}
       />
 
       <div className="flex-1 flex flex-col h-full relative">
         {/* Mobile Header */}
         <div className="md:hidden h-14 flex items-center px-4 bg-white border-b border-gray-200 shrink-0">
            <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-gray-600"><List size={20}/></button>
-           <span className="ml-3 font-semibold text-gray-700 capitalize">{view} Mode</span>
+           <span className="ml-3 font-semibold text-gray-700 capitalize">{view === 'quiz' && !isSessionActive ? 'New Session' : `${view} Mode`}</span>
         </div>
 
         <main className="flex-1 overflow-y-auto relative">
           
           {view === 'quiz' && (
-            <div className="flex flex-col h-full">
-               <div className="flex-1 flex flex-col justify-center p-4">
-                  <QuestionCard 
-                    qNum={currentQuestion}
-                    selectedOption={answers[currentQuestion]}
-                    confidence={confidenceMap[currentQuestion] || 'confident'}
-                    isFlagged={flags.includes(currentQuestion)}
-                    onSelect={handleAnswer}
-                    onSetConfidence={handleSetConfidence}
-                    onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
-                    onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
-                  />
-                  
-                  {/* Controls */}
-                  <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
-                      <button onClick={() => setCurrentQuestion(c => Math.max(1, c-1))} disabled={currentQuestion===1} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
-                      <div className="text-sm font-medium text-gray-400"> {Object.keys(answers).length} / {totalQuestions} Answered </div>
-                      <button onClick={() => setCurrentQuestion(c => Math.min(totalQuestions, c+1))} disabled={currentQuestion===totalQuestions} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronRight size={24} /></button>
-                  </div>
-               </div>
-               
-               {/* Bottom Action Bar */}
-               <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0">
-                  <button onClick={() => setAutoAdvance(!autoAdvance)} className={`text-xs px-3 py-1.5 rounded-full border ${autoAdvance ? 'bg-blue-50 border-blue-200 text-blue-600' : 'text-gray-400'}`}>
-                    Auto-Advance: {autoAdvance ? 'ON' : 'OFF'}
-                  </button>
-                  <button 
-                    onClick={finishSession}
-                    className="px-6 py-2 bg-gray-900 text-white rounded-lg shadow-lg shadow-gray-900/20 hover:bg-gray-800 transition-all font-medium text-sm"
-                  >
-                    Finish & Grade
-                  </button>
-               </div>
-            </div>
+            !isSessionActive ? (
+              <SetupView onStart={startNewSession} />
+            ) : (
+              <div className="flex flex-col h-full">
+                 <div className="flex-1 flex flex-col justify-center p-4">
+                    <QuestionCard 
+                      qNum={currentQuestion}
+                      selectedOption={answers[currentQuestion]}
+                      confidence={confidenceMap[currentQuestion] || 'confident'}
+                      isFlagged={flags.includes(currentQuestion)}
+                      onSelect={handleAnswer}
+                      onSetConfidence={handleSetConfidence}
+                      onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
+                      onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
+                    />
+                    
+                    {/* Controls */}
+                    <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
+                        <button onClick={() => setCurrentQuestion(c => Math.max(1, c-1))} disabled={currentQuestion===1} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
+                        <div className="text-sm font-medium text-gray-400"> {Object.keys(answers).length} / {totalQuestions} Answered </div>
+                        <button onClick={() => setCurrentQuestion(c => Math.min(totalQuestions, c+1))} disabled={currentQuestion===totalQuestions} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronRight size={24} /></button>
+                    </div>
+                 </div>
+                 
+                 {/* Bottom Action Bar */}
+                 <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0">
+                    <button onClick={() => setAutoAdvance(!autoAdvance)} className={`text-xs px-3 py-1.5 rounded-full border ${autoAdvance ? 'bg-blue-50 border-blue-200 text-blue-600' : 'text-gray-400'}`}>
+                      Auto-Advance: {autoAdvance ? 'ON' : 'OFF'}
+                    </button>
+                    <button 
+                      onClick={finishSession}
+                      className="px-6 py-2 bg-gray-900 text-white rounded-lg shadow-lg shadow-gray-900/20 hover:bg-gray-800 transition-all font-medium text-sm"
+                    >
+                      Finish & Grade
+                    </button>
+                 </div>
+              </div>
+            )
           )}
 
           {view === 'grading' && (
