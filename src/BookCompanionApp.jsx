@@ -3,11 +3,10 @@ import {
   ChevronLeft, ChevronRight, Flag, Trash2, CheckCircle2, 
   List, BookOpen, X, PieChart, Calendar, Save, 
   Download, Upload, Tag, Check, XCircle, MinusCircle,
-  BarChart3, History
+  BarChart3, History, HelpCircle, Dices, Zap
 } from 'lucide-react';
 
 // --- Database Configuration (Local Storage Wrapper) ---
-// Replacing Dexie with a custom wrapper to ensure compatibility without external dependencies
 class LocalDB {
   constructor() {
     this.key = 'study-sessions-v2';
@@ -36,7 +35,6 @@ class LocalDB {
       },
       bulkAdd: async (items) => {
         const list = this._get();
-        // Ensure IDs exist
         const newItems = items.map(i => ({...i, id: i.id || Date.now() + Math.random()}));
         this._set([...list, ...newItems]);
       },
@@ -128,18 +126,31 @@ const Sidebar = ({ currentView, onViewChange, isOpen, setIsOpen }) => {
       </div>
       
       <div className="mt-auto p-4 border-t border-gray-200">
-         <div className="text-xs text-gray-400 text-center">v2.1 &bull; Local Storage</div>
+         <div className="text-xs text-gray-400 text-center">v2.2 &bull; Confidence</div>
       </div>
     </div>
   );
 };
 
-// 2. Question Card (Quiz Mode)
-const QuestionCard = ({ qNum, selectedOption, onSelect, isFlagged, onToggleFlag, onClear }) => {
+// 2. Question Card (Quiz Mode) with Confidence Flags
+const QuestionCard = ({ 
+  qNum, selectedOption, onSelect, isFlagged, onToggleFlag, onClear,
+  confidence, onSetConfidence 
+}) => {
   const options = ['A', 'B', 'C', 'D'];
+  
+  // Confidence definitions
+  const levels = [
+    { id: 'confident', label: 'Confident', icon: Zap, color: 'text-blue-500 bg-blue-50 border-blue-200' },
+    { id: 'unsure', label: 'Unsure', icon: HelpCircle, color: 'text-amber-500 bg-amber-50 border-amber-200' },
+    { id: 'guessing', label: 'Guessing', icon: Dices, color: 'text-purple-500 bg-purple-50 border-purple-200' }
+  ];
+
   return (
     <div className="w-full max-w-xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        
+        {/* Header */}
         <div className="px-6 py-6 flex justify-between items-start border-b border-gray-50 bg-gray-50/30">
           <div>
             <span className="text-xs font-bold tracking-wider text-gray-400 uppercase">Question</span>
@@ -151,30 +162,56 @@ const QuestionCard = ({ qNum, selectedOption, onSelect, isFlagged, onToggleFlag,
             </button>
           </div>
         </div>
-        <div className="p-4 space-y-3">
-          {options.map((opt) => {
-            const isSelected = selectedOption === opt;
-            return (
-              <button
-                key={opt}
-                onClick={() => onSelect(opt)}
-                className={`w-full text-left p-4 rounded-xl flex items-center transition-all duration-200 border ${isSelected ? 'bg-blue-500 border-blue-600 text-white shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 text-gray-700'}`}
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mr-4 border ${isSelected ? 'bg-white text-blue-500 border-white' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>{opt}</div>
-                <span className="text-lg font-medium">Option {opt}</span>
-              </button>
-            );
-          })}
+
+        {/* Content */}
+        <div className="p-4 space-y-4">
+          
+          {/* Confidence Selector */}
+          <div className="flex gap-2 mb-4 justify-center">
+             {levels.map((lvl) => {
+               const isActive = confidence === lvl.id;
+               return (
+                 <button
+                   key={lvl.id}
+                   onClick={() => onSetConfidence(lvl.id)}
+                   className={`
+                     flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium border transition-all
+                     ${isActive 
+                       ? `${lvl.color} ring-1 ring-inset` 
+                       : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}
+                   `}
+                 >
+                   <lvl.icon size={14} />
+                   {lvl.label}
+                 </button>
+               )
+             })}
+          </div>
+
+          {/* Options */}
+          <div className="space-y-3">
+            {options.map((opt) => {
+              const isSelected = selectedOption === opt;
+              return (
+                <button
+                  key={opt}
+                  onClick={() => onSelect(opt)}
+                  className={`w-full text-left p-4 rounded-xl flex items-center transition-all duration-200 border ${isSelected ? 'bg-blue-500 border-blue-600 text-white shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 text-gray-700'}`}
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mr-4 border ${isSelected ? 'bg-white text-blue-500 border-white' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>{opt}</div>
+                  <span className="text-lg font-medium">Option {opt}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-// 3. Grading View (The "Check against Book" Interface)
-const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
-  // resultState: 'correct' | 'wrong' | 'skipped'
-  // Initialize: If answered -> 'correct' (optimistic), else 'skipped'
+// 3. Grading View (Updated to show Confidence)
+const GradingView = ({ answers, confidenceMap, totalQuestions, onSaveSession, onCancel }) => {
   const [results, setResults] = useState(() => {
     const initial = {};
     for (let i = 1; i <= totalQuestions; i++) {
@@ -187,7 +224,7 @@ const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
   const [isSaving, setIsSaving] = useState(false);
 
   const toggleResult = (qNum) => {
-    if (!answers[qNum]) return; // Can't mark skipped as correct/wrong easily without answer
+    if (!answers[qNum]) return;
     setResults(prev => ({
       ...prev,
       [qNum]: prev[qNum] === 'correct' ? 'wrong' : 'correct'
@@ -213,6 +250,7 @@ const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
       timestamp: new Date(),
       totalQuestions,
       answers, 
+      confidenceMap,
       results,
       tags: tagArray,
       stats: { correct, wrong, skipped, accuracy: correct / (correct + wrong) || 0 }
@@ -228,7 +266,7 @@ const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
       <div className="bg-white rounded-t-2xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 z-10">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Grading Mode</h2>
-          <p className="text-gray-500 text-sm">Check your physical book. Tap red to mark errors.</p>
+          <p className="text-gray-500 text-sm">Tap red to mark errors. Icons show confidence.</p>
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
@@ -252,7 +290,8 @@ const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
           {Array.from({ length: totalQuestions }, (_, i) => i + 1).map(q => {
             const status = results[q];
             const hasAnswer = !!answers[q];
-            
+            const conf = confidenceMap[q] || 'confident';
+
             return (
               <button
                 key={q}
@@ -265,7 +304,12 @@ const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
                   ${status === 'wrong' && hasAnswer ? 'bg-red-50 border-2 border-red-100 text-red-600' : ''}
                 `}
               >
-                <span className="text-xs font-bold mb-1">{q}</span>
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-xs font-bold">{q}</span>
+                  {hasAnswer && conf === 'unsure' && <HelpCircle size={10} className="text-amber-500" />}
+                  {hasAnswer && conf === 'guessing' && <Dices size={10} className="text-purple-500" />}
+                </div>
+
                 {hasAnswer && <span className="text-lg font-bold">{answers[q]}</span>}
                 
                 <div className="absolute -bottom-2">
@@ -277,6 +321,10 @@ const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
             )
           })}
         </div>
+        <div className="mt-6 flex justify-center gap-4 text-xs text-gray-500">
+           <div className="flex items-center gap-1"><HelpCircle size={12} className="text-amber-500"/> Unsure</div>
+           <div className="flex items-center gap-1"><Dices size={12} className="text-purple-500"/> Guessing</div>
+        </div>
       </div>
     </div>
   );
@@ -284,7 +332,7 @@ const GradingView = ({ answers, totalQuestions, onSaveSession, onCancel }) => {
 
 // 4. Statistics Dashboard
 const StatsView = () => {
-  const [timeRange, setTimeRange] = useState('weekly'); // 'daily', 'weekly', 'monthly'
+  const [timeRange, setTimeRange] = useState('weekly');
   const [stats, setStats] = useState({ correct: 0, wrong: 0, skipped: 0, total: 0 });
   const [sessions, setSessions] = useState([]);
 
@@ -297,7 +345,6 @@ const StatsView = () => {
       if (timeRange === 'weekly') startDate.setDate(now.getDate() - 7);
       if (timeRange === 'monthly') startDate.setMonth(now.getMonth() - 1);
 
-      // Using the wrapper's .where().aboveOrEqual() syntax
       const loadedSessions = await db.sessions
         .where('timestamp')
         .aboveOrEqual(startDate)
@@ -401,12 +448,11 @@ const StatsView = () => {
   );
 };
 
-// 5. History / Logbook View (with Backup)
+// 5. History / Logbook View
 const HistoryView = () => {
   const [sessions, setSessions] = useState([]);
 
   const refresh = async () => {
-    // Using wrapper's .orderBy().reverse().toArray() syntax
     const all = await db.sessions.orderBy('timestamp').reverse().toArray();
     setSessions(all);
   };
@@ -508,6 +554,7 @@ export default function BookCompanionApp() {
   const [totalQuestions, setTotalQuestions] = useState(100);
   const [currentQuestion, setCurrentQuestion] = useState(1);
   const [answers, setAnswers] = useState({});
+  const [confidenceMap, setConfidenceMap] = useState({}); // Stores 'confident' | 'unsure' | 'guessing'
   const [flags, setFlags] = useState([]);
   const [autoAdvance, setAutoAdvance] = useState(true);
 
@@ -518,13 +565,14 @@ export default function BookCompanionApp() {
       const p = JSON.parse(saved);
       setAnswers(p.answers || {});
       setFlags(p.flags || []);
+      setConfidenceMap(p.confidenceMap || {});
       setCurrentQuestion(p.currentQuestion || 1);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('active-session', JSON.stringify({ answers, flags, currentQuestion }));
-  }, [answers, flags, currentQuestion]);
+    localStorage.setItem('active-session', JSON.stringify({ answers, flags, confidenceMap, currentQuestion }));
+  }, [answers, flags, confidenceMap, currentQuestion]);
 
   // Handlers
   const handleAnswer = (opt) => {
@@ -532,6 +580,10 @@ export default function BookCompanionApp() {
     if (autoAdvance && currentQuestion < totalQuestions) {
       setTimeout(() => setCurrentQuestion(c => c + 1), 200);
     }
+  };
+
+  const handleSetConfidence = (level) => {
+    setConfidenceMap(p => ({...p, [currentQuestion]: level}));
   };
 
   const finishSession = () => {
@@ -542,6 +594,7 @@ export default function BookCompanionApp() {
     // Clear local storage and state
     setAnswers({});
     setFlags([]);
+    setConfidenceMap({});
     setCurrentQuestion(1);
     localStorage.removeItem('active-session');
     setView('history');
@@ -572,8 +625,10 @@ export default function BookCompanionApp() {
                   <QuestionCard 
                     qNum={currentQuestion}
                     selectedOption={answers[currentQuestion]}
+                    confidence={confidenceMap[currentQuestion] || 'confident'}
                     isFlagged={flags.includes(currentQuestion)}
                     onSelect={handleAnswer}
+                    onSetConfidence={handleSetConfidence}
                     onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
                     onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
                   />
@@ -604,6 +659,7 @@ export default function BookCompanionApp() {
           {view === 'grading' && (
             <GradingView 
               answers={answers}
+              confidenceMap={confidenceMap}
               totalQuestions={totalQuestions}
               onSaveSession={handleSessionSaved}
               onCancel={() => setView('quiz')}
