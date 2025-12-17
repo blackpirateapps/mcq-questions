@@ -16,6 +16,7 @@ export default function BookCompanionApp() {
   
   // Quiz State
   const [totalQuestions, setTotalQuestions] = useState(100);
+  const [startQuestion, setStartQuestion] = useState(1); // New State
   const [currentQuestion, setCurrentQuestion] = useState(1);
   const [answers, setAnswers] = useState({});
   const [confidenceMap, setConfidenceMap] = useState({}); 
@@ -32,19 +33,20 @@ export default function BookCompanionApp() {
       setFlags(p.flags || []);
       setConfidenceMap(p.confidenceMap || {});
       setCurrentQuestion(p.currentQuestion || 1);
+      setStartQuestion(p.startQuestion || 1); // Restore startQuestion
       if (p.visited) setVisited(new Set(p.visited));
       if (p.totalQuestions) setTotalQuestions(p.totalQuestions);
-      setIsSessionActive(true); // Mark session as active if data found
+      setIsSessionActive(true); 
     }
   }, []);
 
   useEffect(() => {
     if (isSessionActive) {
       localStorage.setItem('active-session', JSON.stringify({ 
-        answers, flags, confidenceMap, currentQuestion, visited: Array.from(visited), totalQuestions 
+        answers, flags, confidenceMap, currentQuestion, visited: Array.from(visited), totalQuestions, startQuestion 
       }));
     }
-  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, isSessionActive]);
+  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, startQuestion, isSessionActive]);
 
   // Track visits
   useEffect(() => {
@@ -58,20 +60,24 @@ export default function BookCompanionApp() {
   }, [currentQuestion, isSessionActive]);
 
   // Handlers
-  const startNewSession = (count) => {
+  const startNewSession = (count, startNum = 1) => {
     setTotalQuestions(count);
-    setCurrentQuestion(1);
+    setStartQuestion(startNum);
+    setCurrentQuestion(startNum);
     setAnswers({});
     setConfidenceMap({});
     setFlags([]);
-    setVisited(new Set([1]));
+    setVisited(new Set([startNum]));
     setIsSessionActive(true);
     setView('quiz');
   };
 
+  // Helper for end question
+  const endQuestion = startQuestion + totalQuestions - 1;
+
   const handleAnswer = (opt) => {
     setAnswers(p => ({...p, [currentQuestion]: opt}));
-    if (autoAdvance && currentQuestion < totalQuestions) {
+    if (autoAdvance && currentQuestion < endQuestion) {
       setTimeout(() => setCurrentQuestion(c => c + 1), 200);
     }
   };
@@ -90,9 +96,10 @@ export default function BookCompanionApp() {
     setAnswers({});
     setFlags([]);
     setConfidenceMap({});
+    setStartQuestion(1);
     setCurrentQuestion(1);
     setVisited(new Set([1]));
-    setIsSessionActive(false); // Session ended
+    setIsSessionActive(false); 
     setView('history');
   };
 
@@ -105,6 +112,7 @@ export default function BookCompanionApp() {
         isOpen={sidebarOpen} 
         setIsOpen={setSidebarOpen}
         totalQuestions={totalQuestions}
+        startQuestion={startQuestion}
         currentQuestion={currentQuestion}
         answers={answers}
         flags={flags}
@@ -141,9 +149,9 @@ export default function BookCompanionApp() {
                     
                     {/* Controls */}
                     <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
-                        <button onClick={() => setCurrentQuestion(c => Math.max(1, c-1))} disabled={currentQuestion===1} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
+                        <button onClick={() => setCurrentQuestion(c => Math.max(startQuestion, c-1))} disabled={currentQuestion===startQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
                         <div className="text-sm font-medium text-gray-400"> {Object.keys(answers).length} / {totalQuestions} Answered </div>
-                        <button onClick={() => setCurrentQuestion(c => Math.min(totalQuestions, c+1))} disabled={currentQuestion===totalQuestions} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronRight size={24} /></button>
+                        <button onClick={() => setCurrentQuestion(c => Math.min(endQuestion, c+1))} disabled={currentQuestion===endQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronRight size={24} /></button>
                     </div>
                  </div>
                  
@@ -168,6 +176,7 @@ export default function BookCompanionApp() {
               answers={answers}
               confidenceMap={confidenceMap}
               totalQuestions={totalQuestions}
+              startQuestion={startQuestion}
               onSaveSession={handleSessionSaved}
               onCancel={() => setView('quiz')}
             />

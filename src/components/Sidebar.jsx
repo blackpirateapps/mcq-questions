@@ -3,7 +3,7 @@ import { BookOpen, History, BarChart3, CheckCircle2, X } from 'lucide-react';
 
 export default function Sidebar({ 
   currentView, onViewChange, isOpen, setIsOpen,
-  totalQuestions, currentQuestion, answers, flags, visited, onJump
+  totalQuestions, startQuestion = 1, currentQuestion, answers, flags, visited, onJump
 }) {
   const navItems = [
     { id: 'quiz', label: 'Current Quiz', icon: BookOpen },
@@ -58,7 +58,7 @@ export default function Sidebar({
            
            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
              <div className="grid grid-cols-5 gap-2">
-               {Array.from({ length: totalQuestions }, (_, i) => i + 1).map((q) => {
+               {Array.from({ length: totalQuestions }, (_, i) => i + startQuestion).map((q) => {
                  const isCurrent = currentQuestion === q;
                  const isAnswered = answers[q] !== undefined;
                  const isFlagged = flags.includes(q);

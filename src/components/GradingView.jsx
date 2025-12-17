@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { Tag, Save, Check, X, MinusCircle, HelpCircle, Dices } from 'lucide-react';
 import { db } from '../lib/db';
 
-export default function GradingView({ answers, confidenceMap, totalQuestions, onSaveSession, onCancel }) {
+export default function GradingView({ answers, confidenceMap, totalQuestions, startQuestion = 1, onSaveSession, onCancel }) {
   const [results, setResults] = useState(() => {
     const initial = {};
-    for (let i = 1; i <= totalQuestions; i++) {
-      initial[i] = answers[i] ? 'correct' : 'skipped';
+    for (let i = 0; i < totalQuestions; i++) {
+      const qNum = startQuestion + i;
+      initial[qNum] = answers[qNum] ? 'correct' : 'skipped';
     }
     return initial;
   });
@@ -78,7 +79,7 @@ export default function GradingView({ answers, confidenceMap, totalQuestions, on
 
       <div className="flex-1 overflow-y-auto bg-white border-x border-b border-gray-200 rounded-b-2xl p-4 custom-scrollbar">
         <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-3">
-          {Array.from({ length: totalQuestions }, (_, i) => i + 1).map(q => {
+          {Array.from({ length: totalQuestions }, (_, i) => i + startQuestion).map(q => {
             const status = results[q];
             const hasAnswer = !!answers[q];
             const conf = confidenceMap[q] || 'confident';

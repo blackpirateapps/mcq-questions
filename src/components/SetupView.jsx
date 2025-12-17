@@ -3,10 +3,11 @@ import { BookOpen, Play } from 'lucide-react';
 
 export default function SetupView({ onStart }) {
   const [count, setCount] = useState(100);
+  const [startNum, setStartNum] = useState(1);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onStart(count);
+    onStart(count, startNum);
   };
 
   return (
@@ -17,20 +18,34 @@ export default function SetupView({ onStart }) {
         </div>
         
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Start New Session</h2>
-        <p className="text-gray-500 mb-8">How many questions would you like to practice today?</p>
+        <p className="text-gray-500 mb-8">Configure your practice session</p>
         
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="relative">
-             <input 
-               type="number" 
-               min="1" 
-               max="500"
-               value={count}
-               onChange={(e) => setCount(Math.min(500, Math.max(1, parseInt(e.target.value) || 0)))}
-               className="w-full text-center text-4xl font-bold text-gray-800 border-b-2 border-gray-200 focus:border-blue-500 focus:outline-none py-4 bg-transparent transition-colors"
-               autoFocus
-             />
-             <div className="text-xs text-gray-400 mt-2 uppercase font-semibold tracking-wider">Questions</div>
+          
+          <div className="flex gap-4">
+            <div className="relative flex-1">
+               <label className="block text-xs text-gray-400 uppercase font-semibold tracking-wider mb-2">Start #</label>
+               <input 
+                 type="number" 
+                 min="1" 
+                 value={startNum}
+                 onChange={(e) => setStartNum(Math.max(1, parseInt(e.target.value) || 0))}
+                 className="w-full text-center text-3xl font-bold text-gray-800 border-b-2 border-gray-200 focus:border-blue-500 focus:outline-none py-2 bg-transparent transition-colors"
+               />
+            </div>
+
+            <div className="relative flex-1">
+               <label className="block text-xs text-gray-400 uppercase font-semibold tracking-wider mb-2">Count</label>
+               <input 
+                 type="number" 
+                 min="1" 
+                 max="500"
+                 value={count}
+                 onChange={(e) => setCount(Math.min(500, Math.max(1, parseInt(e.target.value) || 0)))}
+                 className="w-full text-center text-3xl font-bold text-gray-800 border-b-2 border-gray-200 focus:border-blue-500 focus:outline-none py-2 bg-transparent transition-colors"
+                 autoFocus
+               />
+            </div>
           </div>
 
           <button 
