@@ -26,8 +26,11 @@ export default function BookCompanionApp() {
   
   // Time Tracking State
   const [sessionStartTime, setSessionStartTime] = useState(null);
-  const [timeSpent, setTimeSpent] = useState({}); 
-  const questionStartRef = useRef(null);
+  const [timeSpent, setTimeSpent] = useState({}); // Map of qId -> ms
+  
+  // Refs for precise active time tracking
+  const currentQStartTimeRef = useRef(null);
+  const currentQAccumulatedRef = useRef(0);
 
   // Restore active session
   useEffect(() => {
@@ -72,20 +75,58 @@ export default function BookCompanionApp() {
     }
   }, [currentQuestion, isSessionActive]);
 
-  // Time Tracking Logic
+  // --- NEW: Active Time Tracking Logic ---
   useEffect(() => {
     if (!isSessionActive) return;
 
-    questionStartRef.current = Date.now();
+    // 1. Initialize for new question
+    currentQAccumulatedRef.current = 0;
+    
+    // Start clock only if currently visible
+    if (!document.hidden) {
+       currentQStartTimeRef.current = Date.now();
+    } else {
+       currentQStartTimeRef.current = null;
+    }
 
+    // 2. Define Visibility Listener
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // PAUSE: Calculate elapsed and add to accumulated
+        if (currentQStartTimeRef.current !== null) {
+          const now = Date.now();
+          currentQAccumulatedRef.current += (now - currentQStartTimeRef.current);
+          currentQStartTimeRef.current = null;
+        }
+      } else {
+        // RESUME: Start clock
+        currentQStartTimeRef.current = Date.now();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // 3. Cleanup: Remove listener and Save Data
     return () => {
-      if (questionStartRef.current) {
-        const elapsed = Date.now() - questionStartRef.current;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      
+      // Calculate final elapsed for this segment
+      let elapsed = currentQAccumulatedRef.current;
+      if (currentQStartTimeRef.current !== null) {
+        elapsed += (Date.now() - currentQStartTimeRef.current);
+      }
+      
+      // Update State
+      if (elapsed > 0) {
         setTimeSpent(prev => ({
           ...prev,
           [currentQuestion]: (prev[currentQuestion] || 0) + elapsed
         }));
       }
+      
+      // Reset Refs
+      currentQStartTimeRef.current = null;
+      currentQAccumulatedRef.current = 0;
     };
   }, [currentQuestion, isSessionActive]);
 
@@ -126,10 +167,8 @@ export default function BookCompanionApp() {
     setView('grading');
   };
 
-  // --- NEW: Cancel Session Handler ---
   const cancelSession = () => {
     if (window.confirm("Are you sure you want to cancel this session? All progress will be lost.")) {
-      // Reset State
       setAnswers({});
       setFlags([]);
       setConfidenceMap({});
@@ -138,12 +177,8 @@ export default function BookCompanionApp() {
       setVisited(new Set([1]));
       setSessionStartTime(null);
       setTimeSpent({});
-      
-      // Clear Active Session
       setIsSessionActive(false);
       localStorage.removeItem('active-session');
-      
-      // Ensure we are on the quiz view (which will now show SetupView)
       setView('quiz');
     }
   };
@@ -161,6 +196,9 @@ export default function BookCompanionApp() {
     setIsSessionActive(false); 
     setView('history');
   };
+
+  // Calculate Total Active Time so far for display
+  const totalActiveTime = Object.values(timeSpent).reduce((a, b) => a + b, 0);
 
   return (
     <div className="flex h-screen bg-[#f3f4f6] text-gray-900 font-sans overflow-hidden">
@@ -203,8 +241,9 @@ export default function BookCompanionApp() {
                       onSetConfidence={handleSetConfidence}
                       onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
                       onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
+                      // Time Props
                       initialTime={timeSpent[currentQuestion] || 0}
-                      sessionStartTime={sessionStartTime}
+                      totalActiveTime={totalActiveTime}
                     />
                     
                     <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
@@ -215,7 +254,6 @@ export default function BookCompanionApp() {
                  </div>
                  
                  <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0 gap-4">
-                    {/* --- NEW: Cancel Button --- */}
                     <button 
                       onClick={cancelSession}
                       className="text-red-500 hover:text-red-600 font-medium text-sm px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
@@ -246,7 +284,7 @@ export default function BookCompanionApp() {
               startQuestion={startQuestion}
               onSaveSession={handleSessionSaved}
               onCancel={() => setView('quiz')}
-              onDiscard={cancelSession} // Pass cancel handler to Grading view
+              onDiscard={cancelSession}
               sessionStartTime={sessionStartTime}
               timeSpent={timeSpent}
             />
