@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Upload, Download, Trash2, ChevronDown, ChevronUp, 
-  CheckCircle2, XCircle, MinusCircle, HelpCircle, Dices, Zap 
+  CheckCircle2, XCircle, MinusCircle, HelpCircle, Dices, Zap, List 
 } from 'lucide-react';
 import { db } from '../lib/db';
 
@@ -45,6 +45,25 @@ const SessionCard = ({ session, onDelete }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const stats = calculateExtendedStats(session);
 
+  // Group question IDs by status for the detailed view
+  const { correctIds, wrongIds, skippedIds } = useMemo(() => {
+    const c = [], w = [], s = [];
+    if (session.results) {
+      Object.entries(session.results).forEach(([qId, status]) => {
+         // Convert qId to number for proper sorting
+         const numId = parseInt(qId);
+         if (status === 'correct') c.push(numId);
+         else if (status === 'wrong') w.push(numId);
+         else s.push(numId);
+      });
+    }
+    return { 
+      correctIds: c.sort((a,b) => a - b), 
+      wrongIds: w.sort((a,b) => a - b), 
+      skippedIds: s.sort((a,b) => a - b) 
+    };
+  }, [session.results]);
+
   const getAccuracy = (correct, total) => total === 0 ? 0 : Math.round((correct / total) * 100);
 
   const StatRow = ({ icon: Icon, label, data, colorClass }) => {
@@ -62,6 +81,23 @@ const SessionCard = ({ session, onDelete }) => {
           <div className="flex items-center gap-1"><XCircle size={14} className="text-red-500"/> {data.wrong}</div>
         </div>
         <div className="font-bold text-gray-800 w-12 text-right">{acc}%</div>
+      </div>
+    );
+  };
+
+  // Helper component to display list of question numbers
+  const QuestionList = ({ title, ids, colorBg, colorText, colorBorder }) => {
+    if (ids.length === 0) return null;
+    return (
+      <div className={`mt-3 p-3 rounded-lg border ${colorBg} ${colorBorder}`}>
+        <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 ${colorText}`}>{title} ({ids.length})</h4>
+        <div className="flex flex-wrap gap-1.5">
+          {ids.map(id => (
+            <span key={id} className={`text-xs font-medium px-1.5 py-0.5 rounded bg-white/60 border border-black/5 ${colorText}`}>
+              {id}
+            </span>
+          ))}
+        </div>
       </div>
     );
   };
@@ -127,8 +163,36 @@ const SessionCard = ({ session, onDelete }) => {
                </div>
             </div>
 
+            {/* Question Breakdown Lists */}
+            <div className="space-y-1 mb-2">
+               <div className="text-xs font-semibold text-gray-400 uppercase mb-1 ml-1 flex items-center gap-1">
+                 <List size={12} /> Question Breakdown
+               </div>
+               <QuestionList 
+                 title="Incorrect Answers" 
+                 ids={wrongIds} 
+                 colorBg="bg-red-50" 
+                 colorBorder="border-red-100" 
+                 colorText="text-red-600" 
+               />
+               <QuestionList 
+                 title="Skipped Questions" 
+                 ids={skippedIds} 
+                 colorBg="bg-gray-50" 
+                 colorBorder="border-gray-200" 
+                 colorText="text-gray-600" 
+               />
+               <QuestionList 
+                 title="Correct Answers" 
+                 ids={correctIds} 
+                 colorBg="bg-emerald-50" 
+                 colorBorder="border-emerald-100" 
+                 colorText="text-emerald-600" 
+               />
+            </div>
+
             {/* Confidence Breakdown */}
-            <div className="space-y-1">
+            <div className="space-y-1 mt-4">
                <div className="text-xs font-semibold text-gray-400 uppercase mb-1 ml-1">Confidence Analysis</div>
                <StatRow 
                  icon={Zap} 
