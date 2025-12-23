@@ -1,9 +1,9 @@
-import React from 'react';
-import { Flag, Zap, HelpCircle, Dices } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Flag, Zap, HelpCircle, Dices, Clock, Timer } from 'lucide-react';
 
 export default function QuestionCard({ 
   qNum, selectedOption, onSelect, isFlagged, onToggleFlag, onClear,
-  confidence, onSetConfidence 
+  confidence, onSetConfidence, initialTime = 0, sessionStartTime
 }) {
   const options = ['A', 'B', 'C', 'D'];
   
@@ -13,17 +13,60 @@ export default function QuestionCard({
     { id: 'guessing', label: 'Guessing', icon: Dices, color: 'text-purple-500 bg-purple-50 border-purple-200' }
   ];
 
+  // --- NEW: Local Timer Logic ---
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
+  const [totalSessionSeconds, setTotalSessionSeconds] = useState(0);
+
+  useEffect(() => {
+    // Reset local counter when question changes
+    setSecondsElapsed(0);
+
+    const interval = setInterval(() => {
+      setSecondsElapsed(prev => prev + 1);
+      
+      if (sessionStartTime) {
+        setTotalSessionSeconds(Math.floor((Date.now() - sessionStartTime) / 1000));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [qNum, sessionStartTime]);
+
+  const formatTime = (totalSeconds) => {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Calculate display time for this question (stored time + current elapsed)
+  const questionDisplayTime = Math.floor(initialTime / 1000) + secondsElapsed;
+
   return (
     <div className="w-full max-w-xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         
         {/* Header */}
-        <div className="px-6 py-6 flex justify-between items-start border-b border-gray-50 bg-gray-50/30">
+        <div className="px-6 py-4 flex justify-between items-center border-b border-gray-50 bg-gray-50/30">
           <div>
             <span className="text-xs font-bold tracking-wider text-gray-400 uppercase">Question</span>
-            <h2 className="text-4xl font-bold text-gray-800 mt-1">{qNum}</h2>
+            <h2 className="text-3xl font-bold text-gray-800 leading-none mt-1">{qNum}</h2>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+             
+             {/* --- NEW: Timer Display --- */}
+             <div className="flex flex-col items-end mr-2">
+                <div className="flex items-center gap-1.5 text-sm font-mono font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100" title="Time on this question">
+                  <Clock size={14} />
+                  {formatTime(questionDisplayTime)}
+                </div>
+                {sessionStartTime && (
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 mt-1" title="Total session time">
+                    <Timer size={10} />
+                    {formatTime(totalSessionSeconds)}
+                  </div>
+                )}
+             </div>
+
             <button onClick={onToggleFlag} className={`p-2 rounded-full transition-colors ${isFlagged ? 'bg-orange-100 text-orange-500' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
               <Flag className={isFlagged ? "fill-current" : ""} size={20} />
             </button>

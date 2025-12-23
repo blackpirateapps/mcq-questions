@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, Calendar, Zap, HelpCircle, Dices, 
   CheckCircle2, XCircle, MinusCircle, TrendingUp,
-  Target, Edit2, Check, X
+  Target, Edit2, Check, X, Clock, Timer
 } from 'lucide-react';
 import { db } from '../lib/db';
 
@@ -42,7 +42,9 @@ export default function StatsView() {
     correct: 0, wrong: 0, skipped: 0,
     confident: { correct: 0, wrong: 0, total: 0 },
     unsure: { correct: 0, wrong: 0, total: 0 },
-    guessing: { correct: 0, wrong: 0, total: 0 }
+    guessing: { correct: 0, wrong: 0, total: 0 },
+    // --- NEW ---
+    totalTime: 0
   });
 
   useEffect(() => {
@@ -66,6 +68,8 @@ export default function StatsView() {
       // --- Aggregation Logic ---
       const agg = loadedSessions.reduce((acc, session) => {
         acc.sessions++;
+        // Accumulate time (fallback to 0 if missing in old data)
+        acc.totalTime += (session.stats?.totalDuration || 0);
         
         const results = session.results || {};
         const confMap = session.confidenceMap || {};
@@ -103,7 +107,8 @@ export default function StatsView() {
         correct: 0, wrong: 0, skipped: 0,
         confident: { correct: 0, wrong: 0, total: 0 },
         unsure: { correct: 0, wrong: 0, total: 0 },
-        guessing: { correct: 0, wrong: 0, total: 0 }
+        guessing: { correct: 0, wrong: 0, total: 0 },
+        totalTime: 0
       });
 
       setStats(agg);
@@ -120,6 +125,15 @@ export default function StatsView() {
   // Goal Calculations
   const currentGoal = goals[timeRange];
   const goalProgress = Math.min(100, Math.round((globalTotal / currentGoal) * 100));
+
+  // --- NEW: Time Formatters ---
+  const formatTotalTime = (ms) => {
+    const hrs = Math.floor(ms / 3600000);
+    const mins = Math.floor((ms % 3600000) / 60000);
+    return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+  };
+  
+  const avgTimePerQuestion = globalTotal > 0 ? Math.round((stats.totalTime / globalTotal) / 1000) : 0;
 
   // Sub-component for the breakdown cards
   const StatCard = ({ label, icon: Icon, data, color, bg, border }) => {
@@ -246,6 +260,18 @@ export default function StatsView() {
           <TrendingUp className="absolute right-4 bottom-4 text-gray-100" size={60} />
         </div>
 
+        {/* --- NEW: Time Stats Card --- */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden flex flex-col justify-center">
+          <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Time Spent</div>
+          <div className="flex items-center gap-2 mb-1">
+             <Clock size={24} className="text-blue-500"/>
+             <span className="text-3xl font-bold text-gray-800">{formatTotalTime(stats.totalTime)}</span>
+          </div>
+          <div className="text-xs text-gray-400 flex items-center gap-1">
+             <Timer size={10} /> ~{avgTimePerQuestion}s per question
+          </div>
+        </div>
+
         <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 flex flex-col justify-center">
           <div className="text-emerald-600 text-xs font-bold uppercase tracking-wider mb-1">Total Correct</div>
           <div className="text-3xl font-bold text-emerald-700 flex items-center gap-2">
@@ -258,17 +284,6 @@ export default function StatsView() {
           <div className="text-3xl font-bold text-red-600 flex items-center gap-2">
             <XCircle size={24} /> {stats.wrong}
           </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-           <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Sessions / Skipped</div>
-           <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold text-gray-800">{stats.sessions}</span>
-              <span className="text-xs text-gray-400">sessions</span>
-           </div>
-           <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-              <MinusCircle size={10} /> {stats.skipped} questions skipped
-           </div>
         </div>
       </div>
 

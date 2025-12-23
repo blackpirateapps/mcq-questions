@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Upload, Download, Trash2, ChevronDown, ChevronUp, 
-  CheckCircle2, XCircle, MinusCircle, HelpCircle, Dices, Zap, List 
+  CheckCircle2, XCircle, MinusCircle, HelpCircle, Dices, Zap, List, Clock, Timer
 } from 'lucide-react';
 import { db } from '../lib/db';
+
+const formatDuration = (ms) => {
+  if (!ms) return '0s';
+  const seconds = Math.floor(ms / 1000);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+};
 
 // Helper to calculate detailed stats from raw session data
 const calculateExtendedStats = (session) => {
@@ -22,8 +30,6 @@ const calculateExtendedStats = (session) => {
       stats.skipped++;
       return;
     }
-
-    // Determine confidence level (default to 'confident' if missing)
     const confidence = confidenceMap[qId] || 'confident';
 
     if (status === 'correct') {
@@ -33,7 +39,6 @@ const calculateExtendedStats = (session) => {
       stats.wrong++;
       if (stats[confidence]) stats[confidence].wrong++;
     }
-
     if (stats[confidence]) stats[confidence].total++;
   });
 
@@ -45,12 +50,10 @@ const SessionCard = ({ session, onDelete }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const stats = calculateExtendedStats(session);
 
-  // Group question IDs by status for the detailed view
   const { correctIds, wrongIds, skippedIds } = useMemo(() => {
     const c = [], w = [], s = [];
     if (session.results) {
       Object.entries(session.results).forEach(([qId, status]) => {
-         // Convert qId to number for proper sorting
          const numId = parseInt(qId);
          if (status === 'correct') c.push(numId);
          else if (status === 'wrong') w.push(numId);
@@ -66,9 +69,14 @@ const SessionCard = ({ session, onDelete }) => {
 
   const getAccuracy = (correct, total) => total === 0 ? 0 : Math.round((correct / total) * 100);
 
+  // --- NEW: Time Stats ---
+  const totalDuration = session.stats?.totalDuration || 0;
+  const answeredCount = stats.correct + stats.wrong;
+  const avgTime = answeredCount > 0 ? totalDuration / answeredCount : 0;
+
   const StatRow = ({ icon: Icon, label, data, colorClass }) => {
     const acc = getAccuracy(data.correct, data.total);
-    if (data.total === 0) return null; // Hide if no questions in this category
+    if (data.total === 0) return null;
 
     return (
       <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100 text-sm">
@@ -85,7 +93,6 @@ const SessionCard = ({ session, onDelete }) => {
     );
   };
 
-  // Helper component to display list of question numbers
   const QuestionList = ({ title, ids, colorBg, colorText, colorBorder }) => {
     if (ids.length === 0) return null;
     return (
@@ -119,15 +126,23 @@ const SessionCard = ({ session, onDelete }) => {
           </div>
         </div>
         
-        <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
+        <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+           {/* --- NEW: Time Badge --- */}
+           {totalDuration > 0 && (
+            <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded text-gray-600 border border-gray-100">
+               <Clock size={14} className="text-blue-500"/>
+               <span className="text-xs font-mono font-medium">{formatDuration(totalDuration)}</span>
+            </div>
+           )}
+
           <div className="text-right">
             <div className="text-xs text-gray-400 uppercase">Score</div>
             <div className="font-bold text-gray-800">
               <span className="text-emerald-600">{stats.correct}</span> / <span className="text-red-500">{stats.wrong}</span>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-gray-400 uppercase">Accuracy</div>
+          <div className="text-right w-12">
+            <div className="text-xs text-gray-400 uppercase">Acc.</div>
             <div className="font-bold text-blue-600">{getAccuracy(stats.correct, stats.correct + stats.wrong)}%</div>
           </div>
           <div className="flex items-center gap-2">
@@ -163,55 +178,36 @@ const SessionCard = ({ session, onDelete }) => {
                </div>
             </div>
 
+            {/* --- NEW: Time Analysis Row --- */}
+            {totalDuration > 0 && (
+               <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="bg-blue-50/50 border border-blue-100 p-2 rounded-lg flex items-center justify-between px-4">
+                     <span className="text-xs text-blue-600 uppercase font-bold flex items-center gap-2"><Timer size={14}/> Total Time</span>
+                     <span className="font-mono font-bold text-blue-700">{formatDuration(totalDuration)}</span>
+                  </div>
+                  <div className="bg-purple-50/50 border border-purple-100 p-2 rounded-lg flex items-center justify-between px-4">
+                     <span className="text-xs text-purple-600 uppercase font-bold flex items-center gap-2"><Clock size={14}/> Avg Pace</span>
+                     <span className="font-mono font-bold text-purple-700">{formatDuration(avgTime)} / q</span>
+                  </div>
+               </div>
+            )}
+
             {/* Question Breakdown Lists */}
             <div className="space-y-1 mb-2">
                <div className="text-xs font-semibold text-gray-400 uppercase mb-1 ml-1 flex items-center gap-1">
                  <List size={12} /> Question Breakdown
                </div>
-               <QuestionList 
-                 title="Incorrect Answers" 
-                 ids={wrongIds} 
-                 colorBg="bg-red-50" 
-                 colorBorder="border-red-100" 
-                 colorText="text-red-600" 
-               />
-               <QuestionList 
-                 title="Skipped Questions" 
-                 ids={skippedIds} 
-                 colorBg="bg-gray-50" 
-                 colorBorder="border-gray-200" 
-                 colorText="text-gray-600" 
-               />
-               <QuestionList 
-                 title="Correct Answers" 
-                 ids={correctIds} 
-                 colorBg="bg-emerald-50" 
-                 colorBorder="border-emerald-100" 
-                 colorText="text-emerald-600" 
-               />
+               <QuestionList title="Incorrect Answers" ids={wrongIds} colorBg="bg-red-50" colorBorder="border-red-100" colorText="text-red-600" />
+               <QuestionList title="Skipped Questions" ids={skippedIds} colorBg="bg-gray-50" colorBorder="border-gray-200" colorText="text-gray-600" />
+               <QuestionList title="Correct Answers" ids={correctIds} colorBg="bg-emerald-50" colorBorder="border-emerald-100" colorText="text-emerald-600" />
             </div>
 
             {/* Confidence Breakdown */}
             <div className="space-y-1 mt-4">
                <div className="text-xs font-semibold text-gray-400 uppercase mb-1 ml-1">Confidence Analysis</div>
-               <StatRow 
-                 icon={Zap} 
-                 label="Confident" 
-                 data={stats.confident} 
-                 colorClass="text-blue-500" 
-               />
-               <StatRow 
-                 icon={HelpCircle} 
-                 label="Unsure" 
-                 data={stats.unsure} 
-                 colorClass="text-amber-500" 
-               />
-               <StatRow 
-                 icon={Dices} 
-                 label="Guessing" 
-                 data={stats.guessing} 
-                 colorClass="text-purple-500" 
-               />
+               <StatRow icon={Zap} label="Confident" data={stats.confident} colorClass="text-blue-500" />
+               <StatRow icon={HelpCircle} label="Unsure" data={stats.unsure} colorClass="text-amber-500" />
+               <StatRow icon={Dices} label="Guessing" data={stats.guessing} colorClass="text-purple-500" />
             </div>
 
           </div>

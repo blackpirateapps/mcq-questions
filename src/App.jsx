@@ -24,7 +24,7 @@ export default function BookCompanionApp() {
   const [visited, setVisited] = useState(new Set([1])); 
   const [autoAdvance, setAutoAdvance] = useState(true);
   
-  // Time Tracking State
+  // --- NEW: Time Tracking State ---
   const [sessionStartTime, setSessionStartTime] = useState(null);
   const [timeSpent, setTimeSpent] = useState({}); // Map of qId -> ms
   const questionStartRef = useRef(null);
@@ -72,14 +72,14 @@ export default function BookCompanionApp() {
     }
   }, [currentQuestion, isSessionActive]);
 
-  // --- Time Tracking Logic ---
+  // --- NEW: Time Tracking Logic ---
   useEffect(() => {
     if (!isSessionActive) return;
 
     // 1. Record start time for this question
     questionStartRef.current = Date.now();
 
-    // 2. Cleanup: When changing questions or unmounting (finishing), save elapsed time
+    // 2. Cleanup: When changing questions or unmounting, save elapsed time
     return () => {
       if (questionStartRef.current) {
         const elapsed = Date.now() - questionStartRef.current;
@@ -124,7 +124,7 @@ export default function BookCompanionApp() {
   };
 
   const finishSession = () => {
-    setIsSessionActive(false); // This triggers the cleanup in useEffect to save time for last question
+    setIsSessionActive(false); // Triggers cleanup to save last question time
     setView('grading');
   };
 
@@ -183,6 +183,9 @@ export default function BookCompanionApp() {
                       onSetConfidence={handleSetConfidence}
                       onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
                       onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
+                      // --- NEW PROPS ---
+                      initialTime={timeSpent[currentQuestion] || 0}
+                      sessionStartTime={sessionStartTime}
                     />
                     
                     <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
@@ -215,7 +218,7 @@ export default function BookCompanionApp() {
               startQuestion={startQuestion}
               onSaveSession={handleSessionSaved}
               onCancel={() => setView('quiz')}
-              // Pass Timing Props
+              // --- NEW PROPS ---
               sessionStartTime={sessionStartTime}
               timeSpent={timeSpent}
             />

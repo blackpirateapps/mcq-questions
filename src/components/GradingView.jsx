@@ -49,13 +49,10 @@ export default function GradingView({
       else skipped++;
     });
 
-    // Calculate Total Duration
-    // Option 1: Wall clock difference (Start to Finish)
+    // --- NEW: Time Calculation ---
     const wallDuration = sessionStartTime ? Date.now() - sessionStartTime : 0;
-    
-    // Option 2: Sum of active time on questions (more accurate if user took breaks?)
-    // Let's stick to wall clock for "Session Duration", but we save both.
-    const activeDuration = Object.values(timeSpent).reduce((a, b) => a + b, 0);
+    // Sum of active time on questions
+    const activeDuration = timeSpent ? Object.values(timeSpent).reduce((a, b) => a + b, 0) : 0;
 
     const sessionData = {
       timestamp: new Date(),
@@ -69,10 +66,11 @@ export default function GradingView({
         wrong, 
         skipped, 
         accuracy: correct / (correct + wrong) || 0,
-        totalDuration: wallDuration, // Saving the total session time
+        // Save new time fields
+        totalDuration: wallDuration, 
         activeDuration: activeDuration 
       },
-      timeSpent // Saving per-question breakdown
+      timeSpent // Save per-question breakdown
     };
 
     await db.sessions.add(sessionData);
