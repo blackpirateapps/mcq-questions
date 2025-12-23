@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, Calendar, Zap, HelpCircle, Dices, 
-  CheckCircle2, XCircle, MinusCircle, TrendingUp 
+  CheckCircle2, XCircle, MinusCircle, TrendingUp,
+  Target, Edit2, Check, X
 } from 'lucide-react';
 import { db } from '../lib/db';
 
@@ -9,7 +10,33 @@ export default function StatsView() {
   const [timeRange, setTimeRange] = useState('weekly');
   const [sessions, setSessions] = useState([]);
   
-  // Extended State for detailed stats
+  // --- Goal State ---
+  const [goals, setGoals] = useState({ daily: 50, weekly: 350, monthly: 1500 });
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState(50);
+
+  // Load goals from local storage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('study-goals');
+    if (saved) {
+      setGoals(JSON.parse(saved));
+    }
+  }, []);
+
+  // Update temp input when range or goals change
+  useEffect(() => {
+    setGoalInput(goals[timeRange]);
+    setIsEditingGoal(false);
+  }, [timeRange, goals]);
+
+  const saveGoal = () => {
+    const newGoals = { ...goals, [timeRange]: Math.max(1, parseInt(goalInput) || 1) };
+    setGoals(newGoals);
+    localStorage.setItem('study-goals', JSON.stringify(newGoals));
+    setIsEditingGoal(false);
+  };
+
+  // --- Stats State ---
   const [stats, setStats] = useState({
     sessions: 0,
     correct: 0, wrong: 0, skipped: 0,
@@ -90,6 +117,10 @@ export default function StatsView() {
   const globalTotal = stats.correct + stats.wrong;
   const globalAccuracy = getAcc(stats.correct, globalTotal);
 
+  // Goal Calculations
+  const currentGoal = goals[timeRange];
+  const goalProgress = Math.min(100, Math.round((globalTotal / currentGoal) * 100));
+
   // Sub-component for the breakdown cards
   const StatCard = ({ label, icon: Icon, data, color, bg, border }) => {
     const accuracy = getAcc(data.correct, data.total);
@@ -143,6 +174,65 @@ export default function StatsView() {
               {t}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Goal & Progress Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl shadow-lg p-6 mb-8 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-4 -translate-y-4">
+          <Target size={140} />
+        </div>
+
+        <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center justify-between">
+           <div className="flex-1 w-full">
+              <div className="flex items-center gap-2 mb-2 text-blue-100 uppercase text-xs font-bold tracking-wider">
+                <Target size={14} /> {timeRange} Goal
+              </div>
+              
+              <div className="flex items-end gap-3 mb-4">
+                {isEditingGoal ? (
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="number" 
+                      autoFocus
+                      className="text-4xl font-bold bg-white/20 border border-blue-400 rounded-lg w-32 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-white"
+                      value={goalInput}
+                      onChange={(e) => setGoalInput(e.target.value)}
+                    />
+                    <div className="flex flex-col gap-1">
+                      <button onClick={saveGoal} className="p-1 bg-white/20 hover:bg-white/40 rounded text-white"><Check size={16}/></button>
+                      <button onClick={() => setIsEditingGoal(false)} className="p-1 bg-white/10 hover:bg-white/30 rounded text-white/80"><X size={16}/></button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="text-5xl font-bold">{globalTotal}</span>
+                    <span className="text-blue-200 text-lg font-medium mb-1">/ {currentGoal} questions</span>
+                    <button onClick={() => setIsEditingGoal(true)} className="p-2 text-blue-200 hover:text-white hover:bg-white/10 rounded-full transition-colors mb-1">
+                      <Edit2 size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="w-full bg-black/20 h-3 rounded-full overflow-hidden backdrop-blur-sm">
+                <div 
+                  className="h-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)] transition-all duration-1000 ease-out" 
+                  style={{ width: `${goalProgress}%` }} 
+                />
+              </div>
+           </div>
+
+           <div className="flex gap-8 md:border-l md:border-white/10 md:pl-8">
+              <div className="text-center">
+                 <div className="text-2xl font-bold">{Math.max(0, currentGoal - globalTotal)}</div>
+                 <div className="text-xs text-blue-200 uppercase font-medium mt-1">Remaining</div>
+              </div>
+              <div className="text-center">
+                 <div className="text-2xl font-bold">{goalProgress}%</div>
+                 <div className="text-xs text-blue-200 uppercase font-medium mt-1">Complete</div>
+              </div>
+           </div>
         </div>
       </div>
 
