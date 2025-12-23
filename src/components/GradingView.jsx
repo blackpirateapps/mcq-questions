@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Tag, Save, Check, X, MinusCircle, HelpCircle, Dices, Clock } from 'lucide-react';
+import { Tag, Save, Check, X, MinusCircle, HelpCircle, Dices, Clock, Trash2 } from 'lucide-react';
 import { db } from '../lib/db';
 
 export default function GradingView({ 
   answers, confidenceMap, totalQuestions, startQuestion = 1, 
-  onSaveSession, onCancel, sessionStartTime, timeSpent 
+  onSaveSession, onCancel, onDiscard, sessionStartTime, timeSpent 
 }) {
   const [results, setResults] = useState(() => {
     const initial = {};
@@ -49,9 +49,7 @@ export default function GradingView({
       else skipped++;
     });
 
-    // --- NEW: Time Calculation ---
     const wallDuration = sessionStartTime ? Date.now() - sessionStartTime : 0;
-    // Sum of active time on questions
     const activeDuration = timeSpent ? Object.values(timeSpent).reduce((a, b) => a + b, 0) : 0;
 
     const sessionData = {
@@ -66,11 +64,10 @@ export default function GradingView({
         wrong, 
         skipped, 
         accuracy: correct / (correct + wrong) || 0,
-        // Save new time fields
         totalDuration: wallDuration, 
         activeDuration: activeDuration 
       },
-      timeSpent // Save per-question breakdown
+      timeSpent
     };
 
     await db.sessions.add(sessionData);
@@ -103,6 +100,16 @@ export default function GradingView({
               onChange={(e) => setTags(e.target.value)}
              />
           </div>
+          
+          {/* --- NEW: Discard Button --- */}
+          <button 
+            onClick={onDiscard} 
+            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" 
+            title="Discard Session"
+          >
+            <Trash2 size={20} />
+          </button>
+
           <button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-all flex items-center gap-2">
             <Save size={18} /> {isSaving ? 'Saving...' : 'Finish'}
           </button>

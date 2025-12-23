@@ -24,9 +24,9 @@ export default function BookCompanionApp() {
   const [visited, setVisited] = useState(new Set([1])); 
   const [autoAdvance, setAutoAdvance] = useState(true);
   
-  // --- NEW: Time Tracking State ---
+  // Time Tracking State
   const [sessionStartTime, setSessionStartTime] = useState(null);
-  const [timeSpent, setTimeSpent] = useState({}); // Map of qId -> ms
+  const [timeSpent, setTimeSpent] = useState({}); 
   const questionStartRef = useRef(null);
 
   // Restore active session
@@ -72,14 +72,12 @@ export default function BookCompanionApp() {
     }
   }, [currentQuestion, isSessionActive]);
 
-  // --- NEW: Time Tracking Logic ---
+  // Time Tracking Logic
   useEffect(() => {
     if (!isSessionActive) return;
 
-    // 1. Record start time for this question
     questionStartRef.current = Date.now();
 
-    // 2. Cleanup: When changing questions or unmounting, save elapsed time
     return () => {
       if (questionStartRef.current) {
         const elapsed = Date.now() - questionStartRef.current;
@@ -124,8 +122,30 @@ export default function BookCompanionApp() {
   };
 
   const finishSession = () => {
-    setIsSessionActive(false); // Triggers cleanup to save last question time
+    setIsSessionActive(false); 
     setView('grading');
+  };
+
+  // --- NEW: Cancel Session Handler ---
+  const cancelSession = () => {
+    if (window.confirm("Are you sure you want to cancel this session? All progress will be lost.")) {
+      // Reset State
+      setAnswers({});
+      setFlags([]);
+      setConfidenceMap({});
+      setStartQuestion(1);
+      setCurrentQuestion(1);
+      setVisited(new Set([1]));
+      setSessionStartTime(null);
+      setTimeSpent({});
+      
+      // Clear Active Session
+      setIsSessionActive(false);
+      localStorage.removeItem('active-session');
+      
+      // Ensure we are on the quiz view (which will now show SetupView)
+      setView('quiz');
+    }
   };
 
   const handleSessionSaved = () => {
@@ -183,7 +203,6 @@ export default function BookCompanionApp() {
                       onSetConfidence={handleSetConfidence}
                       onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
                       onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
-                      // --- NEW PROPS ---
                       initialTime={timeSpent[currentQuestion] || 0}
                       sessionStartTime={sessionStartTime}
                     />
@@ -195,10 +214,19 @@ export default function BookCompanionApp() {
                     </div>
                  </div>
                  
-                 <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0">
+                 <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0 gap-4">
+                    {/* --- NEW: Cancel Button --- */}
+                    <button 
+                      onClick={cancelSession}
+                      className="text-red-500 hover:text-red-600 font-medium text-sm px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+
                     <button onClick={() => setAutoAdvance(!autoAdvance)} className={`text-xs px-3 py-1.5 rounded-full border ${autoAdvance ? 'bg-blue-50 border-blue-200 text-blue-600' : 'text-gray-400'}`}>
                       Auto-Advance: {autoAdvance ? 'ON' : 'OFF'}
                     </button>
+                    
                     <button 
                       onClick={finishSession}
                       className="px-6 py-2 bg-gray-900 text-white rounded-lg shadow-lg shadow-gray-900/20 hover:bg-gray-800 transition-all font-medium text-sm"
@@ -218,7 +246,7 @@ export default function BookCompanionApp() {
               startQuestion={startQuestion}
               onSaveSession={handleSessionSaved}
               onCancel={() => setView('quiz')}
-              // --- NEW PROPS ---
+              onDiscard={cancelSession} // Pass cancel handler to Grading view
               sessionStartTime={sessionStartTime}
               timeSpent={timeSpent}
             />
