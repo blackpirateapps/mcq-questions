@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { List, ChevronLeft, ChevronRight } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import QuestionCard from './components/QuestionCard';
@@ -8,7 +8,7 @@ import HistoryView from './components/HistoryView';
 import SetupView from './components/SetupView';
 
 export default function BookCompanionApp() {
-  const [view, setView] = useState('quiz'); // 'quiz', 'grading', 'stats', 'history'
+  const [view, setView] = useState('quiz'); 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Session State
@@ -16,15 +16,20 @@ export default function BookCompanionApp() {
   
   // Quiz State
   const [totalQuestions, setTotalQuestions] = useState(100);
-  const [startQuestion, setStartQuestion] = useState(1); // New State
+  const [startQuestion, setStartQuestion] = useState(1); 
   const [currentQuestion, setCurrentQuestion] = useState(1);
   const [answers, setAnswers] = useState({});
   const [confidenceMap, setConfidenceMap] = useState({}); 
   const [flags, setFlags] = useState([]);
   const [visited, setVisited] = useState(new Set([1])); 
   const [autoAdvance, setAutoAdvance] = useState(true);
+  
+  // Time Tracking State
+  const [sessionStartTime, setSessionStartTime] = useState(null);
+  const [timeSpent, setTimeSpent] = useState({}); // Map of qId -> ms
+  const questionStartRef = useRef(null);
 
-  // Restore active session from LocalStorage
+  // Restore active session
   useEffect(() => {
     const saved = localStorage.getItem('active-session');
     if (saved) {
@@ -33,22 +38,30 @@ export default function BookCompanionApp() {
       setFlags(p.flags || []);
       setConfidenceMap(p.confidenceMap || {});
       setCurrentQuestion(p.currentQuestion || 1);
-      setStartQuestion(p.startQuestion || 1); // Restore startQuestion
+      setStartQuestion(p.startQuestion || 1); 
       if (p.visited) setVisited(new Set(p.visited));
       if (p.totalQuestions) setTotalQuestions(p.totalQuestions);
+      
+      // Restore Timing
+      if (p.sessionStartTime) setSessionStartTime(p.sessionStartTime);
+      if (p.timeSpent) setTimeSpent(p.timeSpent);
+      
       setIsSessionActive(true); 
     }
   }, []);
 
+  // Save active session
   useEffect(() => {
     if (isSessionActive) {
       localStorage.setItem('active-session', JSON.stringify({ 
-        answers, flags, confidenceMap, currentQuestion, visited: Array.from(visited), totalQuestions, startQuestion 
+        answers, flags, confidenceMap, currentQuestion, 
+        visited: Array.from(visited), totalQuestions, startQuestion,
+        sessionStartTime, timeSpent
       }));
     }
-  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, startQuestion, isSessionActive]);
+  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, startQuestion, isSessionActive, sessionStartTime, timeSpent]);
 
-  // Track visits
+  // Visit tracking
   useEffect(() => {
     if (isSessionActive) {
       setVisited(prev => {
@@ -59,6 +72,26 @@ export default function BookCompanionApp() {
     }
   }, [currentQuestion, isSessionActive]);
 
+  // --- Time Tracking Logic ---
+  useEffect(() => {
+    if (!isSessionActive) return;
+
+    // 1. Record start time for this question
+    questionStartRef.current = Date.now();
+
+    // 2. Cleanup: When changing questions or unmounting (finishing), save elapsed time
+    return () => {
+      if (questionStartRef.current) {
+        const elapsed = Date.now() - questionStartRef.current;
+        setTimeSpent(prev => ({
+          ...prev,
+          [currentQuestion]: (prev[currentQuestion] || 0) + elapsed
+        }));
+      }
+    };
+  }, [currentQuestion, isSessionActive]);
+
+
   // Handlers
   const startNewSession = (count, startNum = 1) => {
     setTotalQuestions(count);
@@ -68,11 +101,15 @@ export default function BookCompanionApp() {
     setConfidenceMap({});
     setFlags([]);
     setVisited(new Set([startNum]));
+    
+    // Reset Timer
+    setSessionStartTime(Date.now());
+    setTimeSpent({});
+    
     setIsSessionActive(true);
     setView('quiz');
   };
 
-  // Helper for end question
   const endQuestion = startQuestion + totalQuestions - 1;
 
   const handleAnswer = (opt) => {
@@ -87,11 +124,11 @@ export default function BookCompanionApp() {
   };
 
   const finishSession = () => {
+    setIsSessionActive(false); // This triggers the cleanup in useEffect to save time for last question
     setView('grading');
   };
 
   const handleSessionSaved = () => {
-    // Clear local storage and state
     localStorage.removeItem('active-session');
     setAnswers({});
     setFlags([]);
@@ -99,6 +136,8 @@ export default function BookCompanionApp() {
     setStartQuestion(1);
     setCurrentQuestion(1);
     setVisited(new Set([1]));
+    setSessionStartTime(null);
+    setTimeSpent({});
     setIsSessionActive(false); 
     setView('history');
   };
@@ -122,7 +161,6 @@ export default function BookCompanionApp() {
       />
 
       <div className="flex-1 flex flex-col h-full relative">
-        {/* Mobile Header */}
         <div className="md:hidden h-14 flex items-center px-4 bg-white border-b border-gray-200 shrink-0">
            <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-gray-600"><List size={20}/></button>
            <span className="ml-3 font-semibold text-gray-700 capitalize">{view === 'quiz' && !isSessionActive ? 'New Session' : `${view} Mode`}</span>
@@ -147,7 +185,6 @@ export default function BookCompanionApp() {
                       onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
                     />
                     
-                    {/* Controls */}
                     <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
                         <button onClick={() => setCurrentQuestion(c => Math.max(startQuestion, c-1))} disabled={currentQuestion===startQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
                         <div className="text-sm font-medium text-gray-400"> {Object.keys(answers).length} / {totalQuestions} Answered </div>
@@ -155,7 +192,6 @@ export default function BookCompanionApp() {
                     </div>
                  </div>
                  
-                 {/* Bottom Action Bar */}
                  <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0">
                     <button onClick={() => setAutoAdvance(!autoAdvance)} className={`text-xs px-3 py-1.5 rounded-full border ${autoAdvance ? 'bg-blue-50 border-blue-200 text-blue-600' : 'text-gray-400'}`}>
                       Auto-Advance: {autoAdvance ? 'ON' : 'OFF'}
@@ -179,6 +215,9 @@ export default function BookCompanionApp() {
               startQuestion={startQuestion}
               onSaveSession={handleSessionSaved}
               onCancel={() => setView('quiz')}
+              // Pass Timing Props
+              sessionStartTime={sessionStartTime}
+              timeSpent={timeSpent}
             />
           )}
 

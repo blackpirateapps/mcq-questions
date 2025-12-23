@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Tag, Save, Check, X, MinusCircle, HelpCircle, Dices } from 'lucide-react';
+import { Tag, Save, Check, X, MinusCircle, HelpCircle, Dices, Clock } from 'lucide-react';
 import { db } from '../lib/db';
 
-export default function GradingView({ answers, confidenceMap, totalQuestions, startQuestion = 1, onSaveSession, onCancel }) {
+export default function GradingView({ 
+  answers, confidenceMap, totalQuestions, startQuestion = 1, 
+  onSaveSession, onCancel, sessionStartTime, timeSpent 
+}) {
   const [results, setResults] = useState(() => {
     const initial = {};
     for (let i = 0; i < totalQuestions; i++) {
@@ -23,11 +26,19 @@ export default function GradingView({ answers, confidenceMap, totalQuestions, st
     }));
   };
 
+  const formatTime = (ms) => {
+    if (!ms) return '0s';
+    const seconds = Math.floor(ms / 1000);
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
     
-    // Calculate Stats
+    // Stats
     let correct = 0;
     let wrong = 0;
     let skipped = 0;
@@ -38,6 +49,14 @@ export default function GradingView({ answers, confidenceMap, totalQuestions, st
       else skipped++;
     });
 
+    // Calculate Total Duration
+    // Option 1: Wall clock difference (Start to Finish)
+    const wallDuration = sessionStartTime ? Date.now() - sessionStartTime : 0;
+    
+    // Option 2: Sum of active time on questions (more accurate if user took breaks?)
+    // Let's stick to wall clock for "Session Duration", but we save both.
+    const activeDuration = Object.values(timeSpent).reduce((a, b) => a + b, 0);
+
     const sessionData = {
       timestamp: new Date(),
       totalQuestions,
@@ -45,7 +64,15 @@ export default function GradingView({ answers, confidenceMap, totalQuestions, st
       confidenceMap,
       results,
       tags: tagArray,
-      stats: { correct, wrong, skipped, accuracy: correct / (correct + wrong) || 0 }
+      stats: { 
+        correct, 
+        wrong, 
+        skipped, 
+        accuracy: correct / (correct + wrong) || 0,
+        totalDuration: wallDuration, // Saving the total session time
+        activeDuration: activeDuration 
+      },
+      timeSpent // Saving per-question breakdown
     };
 
     await db.sessions.add(sessionData);
@@ -58,7 +85,14 @@ export default function GradingView({ answers, confidenceMap, totalQuestions, st
       <div className="bg-white rounded-t-2xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 z-10">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Grading Mode</h2>
-          <p className="text-gray-500 text-sm">Tap red to mark errors. Icons show confidence.</p>
+          <div className="flex gap-4 text-sm text-gray-500 mt-1">
+             <span>Tap red to mark errors.</span>
+             {sessionStartTime && (
+                <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 rounded-md">
+                   <Clock size={12} /> Time: {formatTime(Date.now() - sessionStartTime)}
+                </span>
+             )}
+          </div>
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
@@ -112,10 +146,6 @@ export default function GradingView({ answers, confidenceMap, totalQuestions, st
               </button>
             )
           })}
-        </div>
-        <div className="mt-6 flex justify-center gap-4 text-xs text-gray-500">
-           <div className="flex items-center gap-1"><HelpCircle size={12} className="text-amber-500"/> Unsure</div>
-           <div className="flex items-center gap-1"><Dices size={12} className="text-purple-500"/> Guessing</div>
         </div>
       </div>
     </div>
