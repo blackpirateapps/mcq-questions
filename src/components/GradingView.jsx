@@ -8,12 +8,14 @@ export default function GradingView({
   initialResults 
 }) {
   const [results, setResults] = useState(() => {
-    if (initialResults) return initialResults;
-    
     const initial = {};
     for (let i = 0; i < totalQuestions; i++) {
       const qNum = startQuestion + i;
-      initial[qNum] = answers[qNum] ? 'correct' : 'skipped';
+      if (initialResults && initialResults[qNum]) {
+        initial[qNum] = initialResults[qNum];
+      } else {
+        initial[qNum] = answers[qNum] ? 'correct' : 'skipped';
+      }
     }
     return initial;
   });
