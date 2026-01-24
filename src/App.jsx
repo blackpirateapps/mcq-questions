@@ -30,6 +30,7 @@ export default function BookCompanionApp() {
   const [quizMode, setQuizMode] = useState('book'); // 'book' | 'interactive'
   const [quizData, setQuizData] = useState([]);
   const [quizResults, setQuizResults] = useState({}); // { qNum: 'correct' | 'wrong' }
+  const [savedQuiz, setSavedQuiz] = useState(null);
 
   // Time Tracking State
   const [sessionStartTime, setSessionStartTime] = useState(null);
@@ -41,6 +42,14 @@ export default function BookCompanionApp() {
 
   // Restore active session
   useEffect(() => {
+    // Restore Saved Quiz
+    const storedQuiz = localStorage.getItem('saved-quiz');
+    if (storedQuiz) {
+      try {
+        setSavedQuiz(JSON.parse(storedQuiz));
+      } catch (e) { console.error("Failed to load saved quiz", e); }
+    }
+
     const saved = localStorage.getItem('active-session');
     if (saved) {
       const p = JSON.parse(saved);
@@ -167,6 +176,10 @@ export default function BookCompanionApp() {
   };
 
   const startInteractiveSession = (data) => {
+    // Persist Quiz
+    localStorage.setItem('saved-quiz', JSON.stringify(data));
+    setSavedQuiz(data);
+
     setQuizMode('interactive');
     setQuizData(data);
     setTotalQuestions(data.length);
@@ -281,7 +294,7 @@ export default function BookCompanionApp() {
         <main className="flex-1 overflow-y-auto relative">
           
           {view === 'upload' && (
-             <QuizUploadView onUpload={startInteractiveSession} />
+             <QuizUploadView onUpload={startInteractiveSession} savedQuiz={savedQuiz} />
           )}
 
           {view === 'quiz' && (
