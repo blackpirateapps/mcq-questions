@@ -30,7 +30,7 @@ export default function BookCompanionApp() {
   const [quizMode, setQuizMode] = useState('book'); // 'book' | 'interactive'
   const [quizData, setQuizData] = useState([]);
   const [quizResults, setQuizResults] = useState({}); // { qNum: 'correct' | 'wrong' }
-  const [savedQuiz, setSavedQuiz] = useState(null);
+  const [quizLibrary, setQuizLibrary] = useState([]);
 
   // Time Tracking State
   const [sessionStartTime, setSessionStartTime] = useState(null);
@@ -42,13 +42,24 @@ export default function BookCompanionApp() {
 
   // Restore active session
   useEffect(() => {
-    // Restore Saved Quiz
-    const storedQuiz = localStorage.getItem('saved-quiz');
-    if (storedQuiz) {
-      try {
-        setSavedQuiz(JSON.parse(storedQuiz));
-      } catch (e) { console.error("Failed to load saved quiz", e); }
+    // Restore Quiz Library & Migrate Legacy
+    const lib = JSON.parse(localStorage.getItem('quiz-library') || '[]');
+    const legacy = localStorage.getItem('saved-quiz');
+    
+    if (legacy && lib.length === 0) {
+       try {
+          const lData = JSON.parse(legacy);
+          lib.push({
+            id: Date.now(),
+            title: 'Imported Quiz',
+            questions: lData,
+            addedAt: new Date().toISOString()
+          });
+          localStorage.setItem('quiz-library', JSON.stringify(lib));
+          localStorage.removeItem('saved-quiz');
+       } catch(e){ console.error("Migration failed", e); }
     }
+    setQuizLibrary(lib);
 
     const saved = localStorage.getItem('active-session');
     if (saved) {
@@ -175,11 +186,28 @@ export default function BookCompanionApp() {
     setView('quiz');
   };
 
-  const startInteractiveSession = (data) => {
-    // Persist Quiz
-    localStorage.setItem('saved-quiz', JSON.stringify(data));
-    setSavedQuiz(data);
+  const handleUploadQuiz = (data, filename) => {
+     const newEntry = {
+        id: Date.now(),
+        title: filename.replace('.json', '') || `Section ${quizLibrary.length + 1}`,
+        questions: data,
+        addedAt: new Date().toISOString()
+     };
+     const newLib = [...quizLibrary, newEntry];
+     setQuizLibrary(newLib);
+     localStorage.setItem('quiz-library', JSON.stringify(newLib));
+     
+     startInteractiveSession(data);
+  };
 
+  const handleDeleteQuiz = (id) => {
+      if(!window.confirm("Remove this quiz section from library?")) return;
+      const newLib = quizLibrary.filter(q => q.id !== id);
+      setQuizLibrary(newLib);
+      localStorage.setItem('quiz-library', JSON.stringify(newLib));
+  };
+
+  const startInteractiveSession = (data) => {
     setQuizMode('interactive');
     setQuizData(data);
     setTotalQuestions(data.length);
@@ -294,7 +322,12 @@ export default function BookCompanionApp() {
         <main className="flex-1 overflow-y-auto relative">
           
           {view === 'upload' && (
-             <QuizUploadView onUpload={startInteractiveSession} savedQuiz={savedQuiz} />
+             <QuizUploadView 
+               onUpload={handleUploadQuiz} 
+               quizLibrary={quizLibrary}
+               onSelect={startInteractiveSession}
+               onDelete={handleDeleteQuiz}
+             />
           )}
 
           {view === 'quiz' && (

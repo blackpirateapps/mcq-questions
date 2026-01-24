@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Upload, FileJson, AlertCircle, Play, History } from 'lucide-react';
+import { Upload, FileJson, AlertCircle, Play, Trash2, Book } from 'lucide-react';
 
-export default function QuizUploadView({ onUpload, savedQuiz }) {
+export default function QuizUploadView({ onUpload, quizLibrary = [], onSelect, onDelete }) {
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -38,7 +38,7 @@ export default function QuizUploadView({ onUpload, savedQuiz }) {
           throw new Error("Invalid format. Each question must have 'question', 'options' (array), and 'answer'.");
         }
 
-        onUpload(json);
+        onUpload(json, file.name);
 
       } catch (err) {
         setError(err.message);
@@ -54,30 +54,9 @@ export default function QuizUploadView({ onUpload, savedQuiz }) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-6 animate-in fade-in zoom-in duration-300">
-      <div className="w-full max-w-xl space-y-6">
+    <div className="flex flex-col items-center justify-start h-full p-6 animate-in fade-in zoom-in duration-300 overflow-y-auto custom-scrollbar">
+      <div className="w-full max-w-2xl space-y-8">
         
-        {/* Saved Quiz Option */}
-        {savedQuiz && (
-           <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 flex items-center justify-between hover:shadow-lg transition-shadow">
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
-                    <History size={24} />
-                 </div>
-                 <div>
-                    <h3 className="font-bold text-gray-800">Resume Last Quiz</h3>
-                    <p className="text-sm text-gray-500">{savedQuiz.length} Questions Available</p>
-                 </div>
-              </div>
-              <button 
-                onClick={() => onUpload(savedQuiz)}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-sm transition-all flex items-center gap-2"
-              >
-                Start <Play size={16} className="fill-current" />
-              </button>
-           </div>
-        )}
-
         {/* Upload Area */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
           <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
@@ -85,7 +64,7 @@ export default function QuizUploadView({ onUpload, savedQuiz }) {
           </div>
           
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Quiz Mode</h2>
-          <p className="text-gray-500 mb-8">Upload a JSON file to start an interactive quiz.</p>
+          <p className="text-gray-500 mb-8">Upload a JSON file to add a new section.</p>
           
           <div 
             className={`
@@ -116,6 +95,48 @@ export default function QuizUploadView({ onUpload, savedQuiz }) {
             </div>
           )}
         </div>
+
+        {/* Library Section */}
+        {quizLibrary.length > 0 && (
+           <div className="space-y-4">
+              <h3 className="text-lg font-bold text-gray-700 px-1">Your Library ({quizLibrary.length})</h3>
+              <div className="grid gap-4">
+                 {quizLibrary.map((quiz) => (
+                    <div key={quiz.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center justify-between hover:shadow-md transition-all group">
+                       <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center shrink-0">
+                             <Book size={20} />
+                          </div>
+                          <div>
+                             <h4 className="font-bold text-gray-800 line-clamp-1">{quiz.title}</h4>
+                             <div className="flex gap-3 text-xs text-gray-500 mt-0.5">
+                                <span>{quiz.questions.length} Questions</span>
+                                <span>&bull;</span>
+                                <span>Added {new Date(quiz.addedAt).toLocaleDateString()}</span>
+                             </div>
+                          </div>
+                       </div>
+                       
+                       <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => onSelect(quiz.questions)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2"
+                          >
+                            <Play size={14} className="fill-current" /> Start
+                          </button>
+                          <button 
+                            onClick={() => onDelete(quiz.id)}
+                            className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title="Delete Quiz"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                       </div>
+                    </div>
+                 ))}
+              </div>
+           </div>
+        )}
       </div>
     </div>
   );
