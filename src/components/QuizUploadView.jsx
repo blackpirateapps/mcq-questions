@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Upload, FileJson, AlertCircle, Play, Trash2, Book } from 'lucide-react';
+import { Upload, FileJson, AlertCircle, Play, Trash2, Book, RotateCcw } from 'lucide-react';
 
-export default function QuizUploadView({ onUpload, quizLibrary = [], onSelect, onDelete }) {
+export default function QuizUploadView({ onUpload, quizLibrary = [], onSelect, onDelete, onRetryMistakes }) {
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -119,11 +119,20 @@ export default function QuizUploadView({ onUpload, quizLibrary = [], onSelect, o
                        
                        <div className="flex items-center gap-2">
                           <button 
-                            onClick={() => onSelect(quiz.questions)}
+                            onClick={() => onSelect(quiz.questions, quiz.id, quiz.title)}
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2"
                           >
                             <Play size={14} className="fill-current" /> Start
                           </button>
+                          
+                          <button 
+                            onClick={() => onRetryMistakes(quiz.id)}
+                            className="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2"
+                            title="Retry Wrong/Skipped"
+                          >
+                            <RotateCcw size={14} /> Mistakes
+                          </button>
+
                           <button 
                             onClick={() => onDelete(quiz.id)}
                             className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"

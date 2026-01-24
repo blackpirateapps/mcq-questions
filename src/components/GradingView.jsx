@@ -2,20 +2,25 @@ import React, { useState } from 'react';
 import { Tag, Save, Check, X, MinusCircle, HelpCircle, Dices, Clock, Trash2 } from 'lucide-react';
 import { db } from '../lib/db';
 
-export default function GradingView({ 
+export default function GradingView({
   answers, confidenceMap, totalQuestions, startQuestion = 1, 
   onSaveSession, onCancel, onDiscard, sessionStartTime, timeSpent,
-  initialResults 
+  initialResults, quizMeta 
 }) {
   const [results, setResults] = useState(() => {
+    if (initialResults) {
+       const initial = {};
+       for (let i = 0; i < totalQuestions; i++) {
+         const qNum = startQuestion + i;
+         initial[qNum] = initialResults[qNum] || 'skipped';
+       }
+       return initial;
+    }
+    
     const initial = {};
     for (let i = 0; i < totalQuestions; i++) {
       const qNum = startQuestion + i;
-      if (initialResults && initialResults[qNum]) {
-        initial[qNum] = initialResults[qNum];
-      } else {
-        initial[qNum] = answers[qNum] ? 'correct' : 'skipped';
-      }
+      initial[qNum] = answers[qNum] ? 'correct' : 'skipped';
     }
     return initial;
   });
@@ -72,14 +77,14 @@ export default function GradingView({
         totalDuration: wallDuration, 
         activeDuration: activeDuration 
       },
-      timeSpent
+      timeSpent,
+      quizMeta
     };
 
     await db.sessions.add(sessionData);
     setIsSaving(false);
     onSaveSession();
   };
-
   return (
     <div className="max-w-4xl mx-auto w-full h-[calc(100vh-4rem)] flex flex-col animate-in fade-in">
       <div className="bg-white rounded-t-2xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 z-10">

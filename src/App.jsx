@@ -8,6 +8,7 @@ import StatsView from './components/StatsView';
 import HistoryView from './components/HistoryView';
 import SetupView from './components/SetupView';
 import QuizUploadView from './components/QuizUploadView';
+import { db } from './lib/db';
 
 export default function BookCompanionApp() {
   const [view, setView] = useState('quiz'); 
@@ -31,6 +32,7 @@ export default function BookCompanionApp() {
   const [quizData, setQuizData] = useState([]);
   const [quizResults, setQuizResults] = useState({}); // { qNum: 'correct' | 'wrong' }
   const [quizLibrary, setQuizLibrary] = useState([]);
+  const [activeQuizMeta, setActiveQuizMeta] = useState(null);
 
   // Time Tracking State
   const [sessionStartTime, setSessionStartTime] = useState(null);
@@ -81,6 +83,7 @@ export default function BookCompanionApp() {
       if (p.quizMode) setQuizMode(p.quizMode);
       if (p.quizData) setQuizData(p.quizData);
       if (p.quizResults) setQuizResults(p.quizResults);
+      if (p.activeQuizMeta) setActiveQuizMeta(p.activeQuizMeta);
 
       setIsSessionActive(true); 
     }
@@ -93,10 +96,10 @@ export default function BookCompanionApp() {
         answers, flags, confidenceMap, currentQuestion, 
         visited: Array.from(visited), totalQuestions, startQuestion,
         sessionStartTime, timeSpent,
-        quizMode, quizData, quizResults
+        quizMode, quizData, quizResults, activeQuizMeta
       }));
     }
-  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, startQuestion, isSessionActive, sessionStartTime, timeSpent, quizMode, quizData, quizResults]);
+  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, startQuestion, isSessionActive, sessionStartTime, timeSpent, quizMode, quizData, quizResults, activeQuizMeta]);
 
   // Visit tracking
   useEffect(() => {
@@ -177,6 +180,7 @@ export default function BookCompanionApp() {
     setVisited(new Set([startNum]));
     setQuizData([]);
     setQuizResults({});
+    setActiveQuizMeta(null);
     
     // Reset Timer
     setSessionStartTime(Date.now());
@@ -197,7 +201,7 @@ export default function BookCompanionApp() {
      setQuizLibrary(newLib);
      localStorage.setItem('quiz-library', JSON.stringify(newLib));
      
-     startInteractiveSession(data);
+     startInteractiveSession(data, { id: newEntry.id, title: newEntry.title });
   };
 
   const handleDeleteQuiz = (id) => {
@@ -207,7 +211,7 @@ export default function BookCompanionApp() {
       localStorage.setItem('quiz-library', JSON.stringify(newLib));
   };
 
-  const startInteractiveSession = (data) => {
+  const startInteractiveSession = (data, meta = null) => {
     setQuizMode('interactive');
     setQuizData(data);
     setTotalQuestions(data.length);
@@ -218,6 +222,7 @@ export default function BookCompanionApp() {
     setFlags([]);
     setVisited(new Set([1]));
     setQuizResults({});
+    setActiveQuizMeta(meta);
 
     // Reset Timer
     setSessionStartTime(Date.now());
@@ -225,6 +230,60 @@ export default function BookCompanionApp() {
 
     setIsSessionActive(true);
     setView('quiz');
+  };
+
+  const handleRetryMistakes = async (quizId) => {
+     // 1. Find Library Item
+     const libItem = quizLibrary.find(q => q.id === quizId);
+     if (!libItem) { alert("Quiz not found in library."); return; }
+
+     // 2. Find Last Session for this Quiz
+     // We need to fetch all sessions and filter (db is simple array)
+     const allSessions = await db.sessions.toArray();
+     const quizSessions = allSessions
+        .filter(s => s.quizMeta && s.quizMeta.id === quizId)
+        .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+     
+     if (quizSessions.length === 0) {
+        alert("No history found for this quiz. Complete it at least once.");
+        return;
+     }
+
+     const lastSession = quizSessions[0];
+     
+     // 3. Identify Mistakes (Wrong or Skipped)
+     const mistakeIndices = [];
+     const results = lastSession.results || {};
+     
+     // results keys are '1', '2'... matching 1-based index
+     // We need to map them to 0-based index for quizData slicing
+     Object.entries(results).forEach(([qKey, status]) => {
+         if (status === 'wrong' || status === 'skipped') {
+             const idx = parseInt(qKey) - 1;
+             if (idx >= 0 && idx < libItem.questions.length) {
+                mistakeIndices.push(idx);
+             }
+         }
+     });
+
+     // Also check for implicitly skipped (if results didn't cover them, but GradingView fix handles this)
+     
+     if (mistakeIndices.length === 0) {
+        alert("Great job! No mistakes found in your last session.");
+        return;
+     }
+
+     // 4. Create Subset Data
+     // Sort indices to maintain order
+     mistakeIndices.sort((a,b) => a - b);
+     const mistakesData = mistakeIndices.map(idx => libItem.questions[idx]);
+
+     // 5. Start Session
+     startInteractiveSession(mistakesData, { 
+        id: quizId, 
+        title: `${libItem.title} (Mistakes)`,
+        isRetry: true 
+     });
   };
 
   const endQuestion = startQuestion + totalQuestions - 1;
@@ -264,6 +323,7 @@ export default function BookCompanionApp() {
       setQuizData([]);
       setQuizResults({});
       setQuizMode('book');
+      setActiveQuizMeta(null);
       setIsSessionActive(false);
       localStorage.removeItem('active-session');
       setView('quiz');
@@ -283,6 +343,7 @@ export default function BookCompanionApp() {
     setQuizData([]);
     setQuizResults({});
     setQuizMode('book');
+    setActiveQuizMeta(null);
     setIsSessionActive(false); 
     setView('history');
   };
@@ -325,12 +386,104 @@ export default function BookCompanionApp() {
              <QuizUploadView 
                onUpload={handleUploadQuiz} 
                quizLibrary={quizLibrary}
-               onSelect={startInteractiveSession}
+               onSelect={(questions, id, title) => startInteractiveSession(questions, { id, title })}
                onDelete={handleDeleteQuiz}
+               onRetryMistakes={handleRetryMistakes}
              />
           )}
 
           {view === 'quiz' && (
+            !isSessionActive ? (
+              <SetupView onStart={startNewSession} />
+            ) : (
+              <div className="flex flex-col h-full">
+                 <div className="flex-1 flex flex-col justify-center p-4">
+                    {quizMode === 'book' ? (
+                      <QuestionCard 
+                        qNum={currentQuestion}
+                        selectedOption={answers[currentQuestion]}
+                        confidence={confidenceMap[currentQuestion] || 'confident'}
+                        isFlagged={flags.includes(currentQuestion)}
+                        onSelect={handleAnswer}
+                        onSetConfidence={handleSetConfidence}
+                        onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
+                        onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
+                        // Time Props
+                        initialTime={timeSpent[currentQuestion] || 0}
+                        totalActiveTime={totalActiveTime}
+                      />
+                    ) : (
+                      <InteractiveQuestionCard
+                        data={quizData[currentQuestion - 1]} // Data is 0-indexed, currentQuestion is 1-indexed
+                        qNum={currentQuestion}
+                        totalQuestions={totalQuestions}
+                        onAnswer={handleInteractiveAnswer}
+                        isLast={currentQuestion === endQuestion}
+                        onNext={() => currentQuestion < endQuestion ? setCurrentQuestion(c => c + 1) : finishSession()}
+                        isFlagged={flags.includes(currentQuestion)}
+                        onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
+                      />
+                    )}
+                    
+                    {quizMode === 'book' && (
+                      <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
+                          <button onClick={() => setCurrentQuestion(c => Math.max(startQuestion, c-1))} disabled={currentQuestion===startQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
+                          <div className="text-sm font-medium text-gray-400"> {Object.keys(answers).length} / {totalQuestions} Answered </div>
+                          <button onClick={() => setCurrentQuestion(c => Math.min(endQuestion, c+1))} disabled={currentQuestion===endQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronRight size={24} /></button>
+                      </div>
+                    )}
+                 </div>
+                 
+                 <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0 gap-4">
+                    <button 
+                      onClick={cancelSession}
+                      className="text-red-500 hover:text-red-600 font-medium text-sm px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+
+                    {quizMode === 'book' && (
+                      <button onClick={() => setAutoAdvance(!autoAdvance)} className={`text-xs px-3 py-1.5 rounded-full border ${autoAdvance ? 'bg-blue-50 border-blue-200 text-blue-600' : 'text-gray-400'}`}>
+                        Auto-Advance: {autoAdvance ? 'ON' : 'OFF'}
+                      </button>
+                    )}
+                    
+                    <button 
+                      onClick={finishSession}
+                      className="px-6 py-2 bg-gray-900 text-white rounded-lg shadow-lg shadow-gray-900/20 hover:bg-gray-800 transition-all font-medium text-sm"
+                    >
+                      Finish & Grade
+                    </button>
+                 </div>
+              </div>
+            )
+          )}
+
+          {view === 'grading' && (
+            <GradingView 
+              answers={answers}
+              confidenceMap={confidenceMap}
+              totalQuestions={totalQuestions}
+              startQuestion={startQuestion}
+              onSaveSession={handleSessionSaved}
+              onCancel={() => setView('quiz')}
+              onDiscard={cancelSession}
+              sessionStartTime={sessionStartTime}
+              timeSpent={timeSpent}
+              initialResults={quizMode === 'interactive' ? quizResults : null}
+              quizMeta={activeQuizMeta}
+            />
+          )}
+
+          {view === 'stats' && <StatsView />}
+          
+          {view === 'history' && <HistoryView />}
+
+        </main>
+      </div>
+    </div>
+  );
+}
             !isSessionActive ? (
               <SetupView onStart={startNewSession} />
             ) : (
