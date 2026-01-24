@@ -1,12 +1,13 @@
 import React from 'react';
-import { BookOpen, History, BarChart3, CheckCircle2, X } from 'lucide-react';
+import { BookOpen, History, BarChart3, CheckCircle2, X, FileJson } from 'lucide-react';
 
 export default function Sidebar({ 
   currentView, onViewChange, isOpen, setIsOpen,
   totalQuestions, startQuestion = 1, currentQuestion, answers, flags, visited, onJump
 }) {
   const navItems = [
-    { id: 'quiz', label: 'Current Quiz', icon: BookOpen },
+    { id: 'quiz', label: 'Book Mode', icon: BookOpen },
+    { id: 'upload', label: 'Quiz Mode', icon: FileJson },
     { id: 'history', label: 'Logbook', icon: History },
     { id: 'stats', label: 'Statistics', icon: BarChart3 },
   ];

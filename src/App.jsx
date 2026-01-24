@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { List, ChevronLeft, ChevronRight } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import QuestionCard from './components/QuestionCard';
+import InteractiveQuestionCard from './components/InteractiveQuestionCard';
 import GradingView from './components/GradingView';
 import StatsView from './components/StatsView';
 import HistoryView from './components/HistoryView';
 import SetupView from './components/SetupView';
+import QuizUploadView from './components/QuizUploadView';
 
 export default function BookCompanionApp() {
   const [view, setView] = useState('quiz'); 
@@ -14,7 +16,7 @@ export default function BookCompanionApp() {
   // Session State
   const [isSessionActive, setIsSessionActive] = useState(false);
   
-  // Quiz State
+  // Quiz State (Common)
   const [totalQuestions, setTotalQuestions] = useState(100);
   const [startQuestion, setStartQuestion] = useState(1); 
   const [currentQuestion, setCurrentQuestion] = useState(1);
@@ -24,6 +26,11 @@ export default function BookCompanionApp() {
   const [visited, setVisited] = useState(new Set([1])); 
   const [autoAdvance, setAutoAdvance] = useState(true);
   
+  // Interactive Quiz Specific
+  const [quizMode, setQuizMode] = useState('book'); // 'book' | 'interactive'
+  const [quizData, setQuizData] = useState([]);
+  const [quizResults, setQuizResults] = useState({}); // { qNum: 'correct' | 'wrong' }
+
   // Time Tracking State
   const [sessionStartTime, setSessionStartTime] = useState(null);
   const [timeSpent, setTimeSpent] = useState({}); // Map of qId -> ms
@@ -37,6 +44,7 @@ export default function BookCompanionApp() {
     const saved = localStorage.getItem('active-session');
     if (saved) {
       const p = JSON.parse(saved);
+      // Restore common state
       setAnswers(p.answers || {});
       setFlags(p.flags || []);
       setConfidenceMap(p.confidenceMap || {});
@@ -49,6 +57,11 @@ export default function BookCompanionApp() {
       if (p.sessionStartTime) setSessionStartTime(p.sessionStartTime);
       if (p.timeSpent) setTimeSpent(p.timeSpent);
       
+      // Restore Mode
+      if (p.quizMode) setQuizMode(p.quizMode);
+      if (p.quizData) setQuizData(p.quizData);
+      if (p.quizResults) setQuizResults(p.quizResults);
+
       setIsSessionActive(true); 
     }
   }, []);
@@ -59,10 +72,11 @@ export default function BookCompanionApp() {
       localStorage.setItem('active-session', JSON.stringify({ 
         answers, flags, confidenceMap, currentQuestion, 
         visited: Array.from(visited), totalQuestions, startQuestion,
-        sessionStartTime, timeSpent
+        sessionStartTime, timeSpent,
+        quizMode, quizData, quizResults
       }));
     }
-  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, startQuestion, isSessionActive, sessionStartTime, timeSpent]);
+  }, [answers, flags, confidenceMap, currentQuestion, visited, totalQuestions, startQuestion, isSessionActive, sessionStartTime, timeSpent, quizMode, quizData, quizResults]);
 
   // Visit tracking
   useEffect(() => {
@@ -133,6 +147,7 @@ export default function BookCompanionApp() {
 
   // Handlers
   const startNewSession = (count, startNum = 1) => {
+    setQuizMode('book');
     setTotalQuestions(count);
     setStartQuestion(startNum);
     setCurrentQuestion(startNum);
@@ -140,6 +155,8 @@ export default function BookCompanionApp() {
     setConfidenceMap({});
     setFlags([]);
     setVisited(new Set([startNum]));
+    setQuizData([]);
+    setQuizResults({});
     
     // Reset Timer
     setSessionStartTime(Date.now());
@@ -149,13 +166,39 @@ export default function BookCompanionApp() {
     setView('quiz');
   };
 
+  const startInteractiveSession = (data) => {
+    setQuizMode('interactive');
+    setQuizData(data);
+    setTotalQuestions(data.length);
+    setStartQuestion(1);
+    setCurrentQuestion(1);
+    setAnswers({});
+    setConfidenceMap({});
+    setFlags([]);
+    setVisited(new Set([1]));
+    setQuizResults({});
+
+    // Reset Timer
+    setSessionStartTime(Date.now());
+    setTimeSpent({});
+
+    setIsSessionActive(true);
+    setView('quiz');
+  };
+
   const endQuestion = startQuestion + totalQuestions - 1;
 
   const handleAnswer = (opt) => {
     setAnswers(p => ({...p, [currentQuestion]: opt}));
-    if (autoAdvance && currentQuestion < endQuestion) {
+    if (quizMode === 'book' && autoAdvance && currentQuestion < endQuestion) {
       setTimeout(() => setCurrentQuestion(c => c + 1), 200);
     }
+  };
+
+  const handleInteractiveAnswer = (opt, isCorrect) => {
+    setAnswers(p => ({...p, [currentQuestion]: opt}));
+    setQuizResults(p => ({...p, [currentQuestion]: isCorrect ? 'correct' : 'wrong'}));
+    // Note: We don't auto-advance in interactive mode to let user see the explanation/result
   };
 
   const handleSetConfidence = (level) => {
@@ -177,6 +220,9 @@ export default function BookCompanionApp() {
       setVisited(new Set([1]));
       setSessionStartTime(null);
       setTimeSpent({});
+      setQuizData([]);
+      setQuizResults({});
+      setQuizMode('book');
       setIsSessionActive(false);
       localStorage.removeItem('active-session');
       setView('quiz');
@@ -193,6 +239,9 @@ export default function BookCompanionApp() {
     setVisited(new Set([1]));
     setSessionStartTime(null);
     setTimeSpent({});
+    setQuizData([]);
+    setQuizResults({});
+    setQuizMode('book');
     setIsSessionActive(false); 
     setView('history');
   };
@@ -221,36 +270,60 @@ export default function BookCompanionApp() {
       <div className="flex-1 flex flex-col h-full relative">
         <div className="md:hidden h-14 flex items-center px-4 bg-white border-b border-gray-200 shrink-0">
            <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-gray-600"><List size={20}/></button>
-           <span className="ml-3 font-semibold text-gray-700 capitalize">{view === 'quiz' && !isSessionActive ? 'New Session' : `${view} Mode`}</span>
+           <span className="ml-3 font-semibold text-gray-700 capitalize">
+             {view === 'quiz' && !isSessionActive 
+               ? 'New Session' 
+               : (view === 'upload' ? 'Upload Quiz' : `${view} Mode`)
+             }
+           </span>
         </div>
 
         <main className="flex-1 overflow-y-auto relative">
           
+          {view === 'upload' && (
+             <QuizUploadView onUpload={startInteractiveSession} />
+          )}
+
           {view === 'quiz' && (
             !isSessionActive ? (
               <SetupView onStart={startNewSession} />
             ) : (
               <div className="flex flex-col h-full">
                  <div className="flex-1 flex flex-col justify-center p-4">
-                    <QuestionCard 
-                      qNum={currentQuestion}
-                      selectedOption={answers[currentQuestion]}
-                      confidence={confidenceMap[currentQuestion] || 'confident'}
-                      isFlagged={flags.includes(currentQuestion)}
-                      onSelect={handleAnswer}
-                      onSetConfidence={handleSetConfidence}
-                      onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
-                      onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
-                      // Time Props
-                      initialTime={timeSpent[currentQuestion] || 0}
-                      totalActiveTime={totalActiveTime}
-                    />
+                    {quizMode === 'book' ? (
+                      <QuestionCard 
+                        qNum={currentQuestion}
+                        selectedOption={answers[currentQuestion]}
+                        confidence={confidenceMap[currentQuestion] || 'confident'}
+                        isFlagged={flags.includes(currentQuestion)}
+                        onSelect={handleAnswer}
+                        onSetConfidence={handleSetConfidence}
+                        onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
+                        onClear={() => { const n = {...answers}; delete n[currentQuestion]; setAnswers(n); }}
+                        // Time Props
+                        initialTime={timeSpent[currentQuestion] || 0}
+                        totalActiveTime={totalActiveTime}
+                      />
+                    ) : (
+                      <InteractiveQuestionCard
+                        data={quizData[currentQuestion - 1]} // Data is 0-indexed, currentQuestion is 1-indexed
+                        qNum={currentQuestion}
+                        totalQuestions={totalQuestions}
+                        onAnswer={handleInteractiveAnswer}
+                        isLast={currentQuestion === endQuestion}
+                        onNext={() => currentQuestion < endQuestion ? setCurrentQuestion(c => c + 1) : finishSession()}
+                        isFlagged={flags.includes(currentQuestion)}
+                        onToggleFlag={() => setFlags(p => p.includes(currentQuestion) ? p.filter(x => x!==currentQuestion) : [...p, currentQuestion])}
+                      />
+                    )}
                     
-                    <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
-                        <button onClick={() => setCurrentQuestion(c => Math.max(startQuestion, c-1))} disabled={currentQuestion===startQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
-                        <div className="text-sm font-medium text-gray-400"> {Object.keys(answers).length} / {totalQuestions} Answered </div>
-                        <button onClick={() => setCurrentQuestion(c => Math.min(endQuestion, c+1))} disabled={currentQuestion===endQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronRight size={24} /></button>
-                    </div>
+                    {quizMode === 'book' && (
+                      <div className="flex justify-between items-center w-full max-w-xl mx-auto mt-8 px-2">
+                          <button onClick={() => setCurrentQuestion(c => Math.max(startQuestion, c-1))} disabled={currentQuestion===startQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronLeft size={24} /></button>
+                          <div className="text-sm font-medium text-gray-400"> {Object.keys(answers).length} / {totalQuestions} Answered </div>
+                          <button onClick={() => setCurrentQuestion(c => Math.min(endQuestion, c+1))} disabled={currentQuestion===endQuestion} className="p-3 text-gray-400 hover:text-blue-600 disabled:opacity-0"><ChevronRight size={24} /></button>
+                      </div>
+                    )}
                  </div>
                  
                  <div className="p-4 bg-white border-t border-gray-200 flex justify-between items-center shrink-0 gap-4">
@@ -261,9 +334,11 @@ export default function BookCompanionApp() {
                       Cancel
                     </button>
 
-                    <button onClick={() => setAutoAdvance(!autoAdvance)} className={`text-xs px-3 py-1.5 rounded-full border ${autoAdvance ? 'bg-blue-50 border-blue-200 text-blue-600' : 'text-gray-400'}`}>
-                      Auto-Advance: {autoAdvance ? 'ON' : 'OFF'}
-                    </button>
+                    {quizMode === 'book' && (
+                      <button onClick={() => setAutoAdvance(!autoAdvance)} className={`text-xs px-3 py-1.5 rounded-full border ${autoAdvance ? 'bg-blue-50 border-blue-200 text-blue-600' : 'text-gray-400'}`}>
+                        Auto-Advance: {autoAdvance ? 'ON' : 'OFF'}
+                      </button>
+                    )}
                     
                     <button 
                       onClick={finishSession}
@@ -287,6 +362,7 @@ export default function BookCompanionApp() {
               onDiscard={cancelSession}
               sessionStartTime={sessionStartTime}
               timeSpent={timeSpent}
+              initialResults={quizMode === 'interactive' ? quizResults : null}
             />
           )}
 

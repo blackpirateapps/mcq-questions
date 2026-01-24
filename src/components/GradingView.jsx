@@ -4,9 +4,12 @@ import { db } from '../lib/db';
 
 export default function GradingView({ 
   answers, confidenceMap, totalQuestions, startQuestion = 1, 
-  onSaveSession, onCancel, onDiscard, sessionStartTime, timeSpent 
+  onSaveSession, onCancel, onDiscard, sessionStartTime, timeSpent,
+  initialResults 
 }) {
   const [results, setResults] = useState(() => {
+    if (initialResults) return initialResults;
+    
     const initial = {};
     for (let i = 0; i < totalQuestions; i++) {
       const qNum = startQuestion + i;
