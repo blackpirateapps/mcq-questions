@@ -242,8 +242,17 @@ export default function HistoryView({ onRevise }) {
   useEffect(() => { refresh(); }, []);
 
   const handleExport = async () => {
-    const allData = await db.sessions.toArray();
-    const blob = new Blob([JSON.stringify(allData, null, 2)], { type: "application/json" });
+    const sessions = await db.sessions.toArray();
+    const library = JSON.parse(localStorage.getItem('quiz-library') || '[]');
+    
+    const exportData = {
+      version: 2,
+      timestamp: new Date().toISOString(),
+      sessions,
+      library
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -258,13 +267,40 @@ export default function HistoryView({ onRevise }) {
     reader.onload = async (event) => {
       try {
         const data = JSON.parse(event.target.result);
-        if (Array.isArray(data)) {
+        
+        // Handle New Format (with Library)
+        if (data.version === 2 || (data.sessions && data.library)) {
+           if (data.sessions && Array.isArray(data.sessions)) {
+              await db.sessions.bulkAdd(data.sessions);
+           }
+           if (data.library && Array.isArray(data.library)) {
+              const currentLib = JSON.parse(localStorage.getItem('quiz-library') || '[]');
+              // Merge avoiding duplicates by ID
+              const newLib = [...currentLib];
+              data.library.forEach(item => {
+                 if (!newLib.some(existing => existing.id === item.id)) {
+                    newLib.push(item);
+                 }
+              });
+              localStorage.setItem('quiz-library', JSON.stringify(newLib));
+           }
+           alert("Import successful! Sessions and Quizzes restored.");
+        } 
+        // Handle Legacy Format (Array of Sessions only)
+        else if (Array.isArray(data)) {
            await db.sessions.bulkAdd(data);
-           alert("Import successful!");
-           refresh();
+           alert("Import successful! (Legacy format)");
+        } else {
+           throw new Error("Unknown format");
         }
+        
+        refresh();
+        // Force reload to update Library in App.jsx (since it doesn't listen to storage events directly)
+        window.location.reload(); 
+
       } catch (err) {
-        alert("Invalid file format");
+        console.error(err);
+        alert("Invalid file format or error importing data.");
       }
     };
     reader.readAsText(file);
