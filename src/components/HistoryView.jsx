@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Upload, Download, Trash2, ChevronDown, ChevronUp, 
-  CheckCircle2, XCircle, MinusCircle, HelpCircle, Dices, Zap, List, Clock, Timer
+  CheckCircle2, XCircle, MinusCircle, HelpCircle, Dices, Zap, List, Clock, Timer, RotateCcw
 } from 'lucide-react';
 import { db } from '../lib/db';
 
@@ -46,7 +46,7 @@ const calculateExtendedStats = (session) => {
 };
 
 // Sub-component for individual session cards
-const SessionCard = ({ session, onDelete }) => {
+const SessionCard = ({ session, onDelete, onRevise }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const stats = calculateExtendedStats(session);
 
@@ -73,6 +73,9 @@ const SessionCard = ({ session, onDelete }) => {
   const totalDuration = session.stats?.totalDuration || 0;
   const answeredCount = stats.correct + stats.wrong;
   const avgTime = answeredCount > 0 ? totalDuration / answeredCount : 0;
+  
+  const hasMistakes = stats.wrong > 0 || stats.skipped > 0;
+  const canRevise = hasMistakes && session.quizData && onRevise;
 
   const StatRow = ({ icon: Icon, label, data, colorClass }) => {
     const acc = getAccuracy(data.correct, data.total);
@@ -160,6 +163,17 @@ const SessionCard = ({ session, onDelete }) => {
       {/* Expanded Details */}
       {isExpanded && (
         <div className="px-4 pb-4 pt-0 animate-in slide-in-from-top-2">
+          {canRevise && (
+             <div className="flex justify-end mb-3 pt-2">
+                <button 
+                  onClick={() => onRevise(session)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-sm font-medium transition-colors border border-blue-200 shadow-sm"
+                >
+                  <RotateCcw size={16} /> Revise errors and skips
+                </button>
+             </div>
+          )}
+
           <div className="border-t border-gray-100 pt-4 grid gap-2">
             
             {/* General Stats */}
@@ -217,7 +231,7 @@ const SessionCard = ({ session, onDelete }) => {
   );
 };
 
-export default function HistoryView() {
+export default function HistoryView({ onRevise }) {
   const [sessions, setSessions] = useState([]);
 
   const refresh = async () => {
@@ -280,7 +294,7 @@ export default function HistoryView() {
 
        <div className="space-y-3">
          {sessions.map(s => (
-           <SessionCard key={s.id} session={s} onDelete={handleDelete} />
+           <SessionCard key={s.id} session={s} onDelete={handleDelete} onRevise={onRevise} />
          ))}
          {sessions.length === 0 && <div className="text-center py-10 text-gray-400">No history available.</div>}
        </div>

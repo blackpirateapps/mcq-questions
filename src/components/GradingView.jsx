@@ -5,7 +5,7 @@ import { db } from '../lib/db';
 export default function GradingView({
   answers, confidenceMap, totalQuestions, startQuestion = 1, 
   onSaveSession, onCancel, onDiscard, sessionStartTime, timeSpent,
-  initialResults, quizMeta 
+  initialResults, quizMeta, quizData 
 }) {
   const [results, setResults] = useState(() => {
     if (initialResults) {
@@ -78,7 +78,8 @@ export default function GradingView({
         activeDuration: activeDuration 
       },
       timeSpent,
-      quizMeta
+      quizMeta,
+      quizData // Persist quiz questions if available
     };
 
     await db.sessions.add(sessionData);

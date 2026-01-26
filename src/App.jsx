@@ -286,6 +286,40 @@ export default function BookCompanionApp() {
      });
   };
 
+  const handleReviseSession = (session) => {
+     if (!session.quizData || !Array.isArray(session.quizData)) {
+         alert("Cannot revise: Original question data is missing from this log entry.");
+         return;
+     }
+
+     const mistakeIndices = [];
+     const results = session.results || {};
+     const startQ = session.startQuestion || 1;
+
+     Object.entries(results).forEach(([qKey, status]) => {
+         if (status === 'wrong' || status === 'skipped') {
+             const idx = parseInt(qKey) - startQ;
+             if (idx >= 0 && idx < session.quizData.length) {
+                mistakeIndices.push(idx);
+             }
+         }
+     });
+
+     if (mistakeIndices.length === 0) {
+        alert("Great job! No errors or skips found to revise in this session.");
+        return;
+     }
+     
+     mistakeIndices.sort((a,b) => a - b);
+     const mistakesData = mistakeIndices.map(idx => session.quizData[idx]);
+
+     startInteractiveSession(mistakesData, {
+        id: `revise-${session.id}`,
+        title: `Revision: ${session.quizMeta?.title || 'Session'}`,
+        isRetry: true
+     });
+  };
+
   const endQuestion = startQuestion + totalQuestions - 1;
 
   const handleAnswer = (opt) => {
@@ -472,12 +506,13 @@ export default function BookCompanionApp() {
               timeSpent={timeSpent}
               initialResults={quizMode === 'interactive' ? quizResults : null}
               quizMeta={activeQuizMeta}
+              quizData={quizMode === 'interactive' ? quizData : null}
             />
           )}
 
           {view === 'stats' && <StatsView />}
           
-          {view === 'history' && <HistoryView />}
+          {view === 'history' && <HistoryView onRevise={handleReviseSession} />}
 
         </main>
       </div>
